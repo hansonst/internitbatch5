@@ -871,7 +871,7 @@ public function checkActiveShiftWithPerbox(Request $request) // <-- This accepts
         'data_timbangan_id' => 'required|integer|exists:data_timbangan,id',
         'box_no' => 'sometimes|integer|min:1',
         'weight_perbox' => 'required|numeric|min:0',
-        'category' => 'sometimes|string|in:Runner,Sapuan,Purging,Defect,Finished Good',
+        'category' => 'nullable|string|in:Runner,Sapuan,Purging,Defect,Finished Good',
         'timbangan_name' => 'sometimes|string', // Add this validation
         'weighed_at' => 'sometimes|date'
     ]);
@@ -889,7 +889,7 @@ public function checkActiveShiftWithPerbox(Request $request) // <-- This accepts
 
         $dataTimbanganId = $request->data_timbangan_id;
         $weightPerBox = $request->weight_perbox;
-        $category = $request->category ?? 'Finished Good';
+        $category = $request->category;
         $timbanganName = $request->timbangan_name; // Get timbangan_name
         $weighedAt = $request->weighed_at ?? now();
 
