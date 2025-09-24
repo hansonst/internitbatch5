@@ -19,6 +19,7 @@ class DataTimbanganPerbox extends Model
         'weight_perbox',
         'category',
         'weighed_at',
+        'timbangan_name',
     ];
 
     protected $casts = [
