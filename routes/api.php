@@ -87,7 +87,8 @@ Route::middleware('auth:sanctum')->group(function () {
         
         // ADD THIS NEW ROUTE FOR MQTT WEIGHT SAVING
         Route::post('/save-weighing-entry', [DataTimbanganController::class, 'saveWeighingEntry']);
-        
+        // GET SESSION STATUS FOR BATCHES
+        Route::get('/batch-session-status/{batchNumber}', [DataTimbanganController::class, 'checkBatchSessionStatus']);
         Route::get('/weighing-entries/session/{data_timbangan_id}', [DataTimbanganController::class, 'getWeightEntries']);
         Route::delete('/weighing-entries/{boxId}', [DataTimbanganController::class, 'deleteBox']);
         

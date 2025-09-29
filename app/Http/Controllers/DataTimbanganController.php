@@ -1123,4 +1123,63 @@ public function saveMqttWeight(Request $request)
         ], 500);
     }
 }
+public function checkBatchSessionStatus($batchNumber)
+{
+    try {
+        // Validate batch number
+        if (empty($batchNumber)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Batch number is required',
+            ], 400);
+        }
+
+        // Check if batch has active session using the model method
+        $hasActiveSession = DataTimbangan::batchHasActiveSession($batchNumber);
+        
+        $sessionDetails = null;
+        if ($hasActiveSession) {
+            // Get the active session details (optional - for additional info)
+            $activeSession = DataTimbangan::where('batch_number', $batchNumber)
+                ->where('session_status', 'open')
+                ->whereNull('ending_counter_pro')
+                ->with(['user:nik,name,inisial']) // Get user info
+                ->first();
+            
+            if ($activeSession) {
+                $sessionDetails = [
+                    'nik' => $activeSession->nik,
+                    'user_name' => $activeSession->user ? $activeSession->user->name : null,
+                    'inisial' => $activeSession->inisial,
+                    'started_at' => $activeSession->created_at,
+                    'starting_counter_pro' => $activeSession->starting_counter_pro,
+                ];
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'batch_number' => $batchNumber,
+            'has_active_session' => $hasActiveSession,
+            'session_status' => $hasActiveSession ? 'open' : 'closed',
+            'session_details' => $sessionDetails,
+            'message' => $hasActiveSession 
+                ? 'Batch has an active session' 
+                : 'Batch is available for new session'
+        ], 200);
+
+    } catch (\Exception $e) {
+        \Log::error('Error checking batch session status', [
+            'batch_number' => $batchNumber,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to check batch session status',
+            'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+        ], 500);
+    }
+}
 }
