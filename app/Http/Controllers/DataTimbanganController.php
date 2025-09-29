@@ -1143,13 +1143,13 @@ public function checkBatchSessionStatus($batchNumber)
             $activeSession = DataTimbangan::where('batch_number', $batchNumber)
                 ->where('session_status', 'open')
                 ->whereNull('ending_counter_pro')
-                ->with(['user:nik,name,inisial']) // Get user info
+                ->with(['user:nik,first_name,last_name,inisial']) // Get user info
                 ->first();
             
             if ($activeSession) {
                 $sessionDetails = [
                     'nik' => $activeSession->nik,
-                    'user_name' => $activeSession->user ? $activeSession->user->name : null,
+                    'user_name' => $activeSession->user ? $activeSession->user->full_name : null, // Use accessor
                     'inisial' => $activeSession->inisial,
                     'started_at' => $activeSession->created_at,
                     'starting_counter_pro' => $activeSession->starting_counter_pro,
