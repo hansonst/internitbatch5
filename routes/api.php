@@ -102,6 +102,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Additional routes for data timbangan
         Route::get('/', [DataTimbanganController::class, 'index']);
         Route::get('/{batchNumber}', [DataTimbanganController::class, 'getByBatch']);
+        Route::get('/data-timbangan/current-session', [DataTimbanganController::class, 'getCurrentSessionData']);
         // Add these routes for MQTT functionality
 Route::get('/mqtt/latest-weight', [DataTimbanganController::class, 'getLatestMqttWeight']);
 Route::post('/mqtt/save-weight', [DataTimbanganController::class, 'saveMqttWeight']);

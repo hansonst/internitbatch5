@@ -1182,4 +1182,89 @@ public function checkBatchSessionStatus($batchNumber)
         ], 500);
     }
 }
+
+public function getCurrentSessionData(Request $request)
+    {
+        try {
+            // Validate input
+            $request->validate([
+                'batch_number' => 'required|string',
+                'nik' => 'required|string',
+            ]);
+
+            $batchNumber = $request->query('batch_number');
+            $nik = $request->query('nik');
+
+            // Log the request for debugging
+            Log::info('Fetching current session data', [
+                'batch_number' => $batchNumber,
+                'nik' => $nik
+            ]);
+
+            // Query the data_timbangan table for the current open session
+            $session = DB::table('data_timbangan')
+                ->where('batch_number', $batchNumber)
+                ->where('nik', $nik)
+                ->where('session_status', 'open')
+                ->orderBy('created_at', 'desc') // Get the most recent if multiple exist
+                ->first();
+
+            if (!$session) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No active session found for this batch and user',
+                    'data' => null
+                ], 404);
+            }
+
+            // Convert stdClass to array for easier manipulation
+            $sessionData = (array) $session;
+
+            // Ensure numeric fields are properly formatted
+            $sessionData['total_weight_all'] = floatval($sessionData['total_weight_all'] ?? 0);
+            $sessionData['total_weight_runner'] = floatval($sessionData['total_weight_runner'] ?? 0);
+            $sessionData['total_weight_sapuan'] = floatval($sessionData['total_weight_sapuan'] ?? 0);
+            $sessionData['total_weight_purging'] = floatval($sessionData['total_weight_purging'] ?? 0);
+            $sessionData['total_weight_defect'] = floatval($sessionData['total_weight_defect'] ?? 0);
+            $sessionData['total_weight_fg'] = floatval($sessionData['total_weight_fg'] ?? 0);
+            $sessionData['total_qty_runner'] = floatval($sessionData['total_qty_runner'] ?? 0);
+            $sessionData['total_qty_sapuan'] = floatval($sessionData['total_qty_sapuan'] ?? 0);
+            $sessionData['total_qty_purging'] = floatval($sessionData['total_qty_purging'] ?? 0);
+            $sessionData['total_qty_defect'] = floatval($sessionData['total_qty_defect'] ?? 0);
+            $sessionData['total_qty_fg'] = floatval($sessionData['total_qty_fg'] ?? 0);
+            $sessionData['starting_counter_pro'] = intval($sessionData['starting_counter_pro'] ?? 0);
+            $sessionData['ending_counter_pro'] = isset($sessionData['ending_counter_pro']) ? intval($sessionData['ending_counter_pro']) : null;
+
+            Log::info('Session data found', ['session_id' => $session->id]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Current session data retrieved successfully',
+                'data' => $sessionData
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('Validation error in getCurrentSessionData', [
+                'errors' => $e->errors()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching current session data', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch session data',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
