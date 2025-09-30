@@ -75,7 +75,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/active-shift', [DataTimbanganController::class, 'getActiveShift']);
         Route::post('/end-shift', [DataTimbanganController::class, 'endShift']);
         Route::get('/active-session', [DataTimbanganController::class, 'getActiveSession']);
-        
+        Route::get('/current-session', [DataTimbanganController::class, 'getCurrentSessionData']);
         // Weighing session routes (combined from SessionController)
         Route::post('/sessions/start', [DataTimbanganController::class, 'startSession']);
         Route::put('/sessions/{id}/close', [DataTimbanganController::class, 'closeSession']);
@@ -101,7 +101,7 @@ Route::middleware('auth:sanctum')->group(function () {
         
         // Additional routes for data timbangan
         Route::get('/', [DataTimbanganController::class, 'index']);
-         Route::get('/data-timbangan/current-session', [DataTimbanganController::class, 'getCurrentSessionData']);
+         
         // Add these routes for MQTT functionality
 Route::get('/mqtt/latest-weight', [DataTimbanganController::class, 'getLatestMqttWeight']);
 Route::post('/mqtt/save-weight', [DataTimbanganController::class, 'saveMqttWeight']);
