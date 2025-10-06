@@ -25,17 +25,20 @@ class ProductionReportController extends Controller
         try {
             // Validate request parameters
             $validated = $request->validate([
-                'material_code' => 'nullable|string|max:50',
-                'shift_id' => 'nullable|integer|min:1|max:3',
-                'batch_number' => 'nullable|string|max:100',
-                'start_date' => 'nullable|date',
-                'end_date' => 'nullable|date|after_or_equal:start_date',
-                'date' => 'nullable|date',
-                'per_page' => 'nullable|integer|min:1|max:100',
-                'page' => 'nullable|integer|min:1',
-                'sort_by' => 'nullable|string|in:actual_time,batch_number,material_code,shift_id,total_qty',
-                'sort_order' => 'nullable|string|in:asc,desc'
-            ]);
+            'material_code' => 'nullable|string|max:50',
+            'shift_id' => 'nullable|integer|min:1|max:3',
+            'batch_number' => 'nullable|string|max:100',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'date' => 'nullable|date',
+            'per_page' => 'nullable|integer|min:1|max:100',
+            'page' => 'nullable|integer|min:1',
+            'sort_by' => 'nullable|string|in:actual_time,batch_number,material_code,shift_id,total_qty',
+            'sort_order' => 'nullable|string|in:asc,desc',
+            'machine_name' => 'nullable|string|max:100',
+            'no_pro' => 'nullable|string|max:100',
+            'initials' => 'nullable|string|max:3',
+        ]);
 
             // Build query
             $query = ProductionReport::query();
@@ -49,7 +52,9 @@ if (!empty($validated['machine_name'])) {
 if (!empty($validated['no_pro'])) {
     $query->where('no_pro', 'like', "%{$validated['no_pro']}%");
 }
-
+if (!empty($validated['initials'])) {
+    $query->where('initials', 'like', "%{$validated['initials']}%");
+}
 // Update date filtering to use single date:
 if (!empty($validated['date'])) {
     $query->whereDate('actual_time', $validated['date']);
