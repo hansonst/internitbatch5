@@ -162,13 +162,16 @@ public function getMaterials(): JsonResponse
 }
 
     // Add this method to fetch pro_order data for the dropdowns
-public function getProOrders(): JsonResponse
+// Updated method to fetch pro_order data with optional date filtering
+public function getProOrders(Request $request): JsonResponse
 {
     try {
-        \Log::info('🔄 Fetching pro orders for task creation...');
+        $filter = $request->input('filter', 'all');
         
-        // Fetch all pro_order records with necessary fields
-        $proOrders = DB::table('pro_order')
+        \Log::info('🔄 Fetching pro orders for task creation with filter: ' . $filter);
+        
+        // Start building the query
+        $query = DB::table('pro_order')
             ->select([
                 'order_id',
                 'material_id', 
@@ -181,17 +184,54 @@ public function getProOrders(): JsonResponse
                 'basic_start_date',
                 'basic_finish_date',
                 'material_code'
-            ])
-            ->orderBy('order_id')
-            ->orderBy('batch')
-            ->get();
+            ]);
         
-        \Log::info('✅ Found ' . $proOrders->count() . ' pro orders');
+        // Apply date filters
+        switch ($filter) {
+            case 'daily':
+                // Orders starting today
+                $query->whereDate('basic_start_date', today());
+                \Log::info('📅 Filtering by today: ' . today()->toDateString());
+                break;
+                
+            case 'weekly':
+                // Orders starting this week
+                $weekStart = now()->startOfWeek();
+                $weekEnd = now()->endOfWeek();
+                $query->whereBetween('basic_start_date', [
+                    $weekStart->toDateString(),
+                    $weekEnd->toDateString()
+                ]);
+                \Log::info('📅 Filtering by this week: ' . $weekStart->toDateString() . ' to ' . $weekEnd->toDateString());
+                break;
+                
+            case 'monthly':
+                // Orders starting this month
+                $query->whereMonth('basic_start_date', now()->month)
+                      ->whereYear('basic_start_date', now()->year);
+                \Log::info('📅 Filtering by this month: ' . now()->format('F Y'));
+                break;
+                
+            case 'all':
+            default:
+                // No filter applied
+                \Log::info('📅 No date filter applied - showing all orders');
+                break;
+        }
+        
+        // Execute query with ordering
+        $proOrders = $query->orderBy('order_id')
+                          ->orderBy('batch')
+                          ->get();
+        
+        \Log::info('✅ Found ' . $proOrders->count() . ' pro orders after filtering');
         
         $response = response()->json([
             'success' => true,
             'message' => 'Pro orders fetched successfully',
-            'data' => $proOrders
+            'data' => $proOrders,
+            'filter_applied' => $filter,
+            'count' => $proOrders->count()
         ]);
         
         return $this->addCorsHeaders($response);
