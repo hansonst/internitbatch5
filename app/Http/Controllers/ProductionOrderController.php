@@ -166,9 +166,12 @@ public function getMaterials(): JsonResponse
 public function getProOrders(Request $request): JsonResponse
 {
     try {
-        $filter = $request->input('filter', 'all');
+        $filter = $request->input('filter', 'daily');
         
         \Log::info('🔄 Fetching pro orders for task creation with filter: ' . $filter);
+        
+        // Set timezone to Jakarta
+        $timezone = 'Asia/Jakarta';
         
         // Start building the query
         $query = DB::table('pro_order')
@@ -186,36 +189,87 @@ public function getProOrders(Request $request): JsonResponse
                 'material_code'
             ]);
         
-        // Apply date filters
+        // Apply date filters (all based on Jakarta timezone)
         switch ($filter) {
             case 'daily':
-                // Orders starting today
-                $query->whereDate('basic_start_date', today());
-                \Log::info('📅 Filtering by today: ' . today()->toDateString());
+                // Orders for today in Jakarta timezone
+                $today = \Carbon\Carbon::now($timezone)->toDateString();
+                $query->whereDate('basic_start_date', '<=', $today)
+                      ->whereDate('basic_finish_date', '>=', $today);
+                \Log::info('📅 Filtering by today (Jakarta): ' . $today);
                 break;
                 
             case 'weekly':
-                // Orders starting this week
-                $weekStart = now()->startOfWeek();
-                $weekEnd = now()->endOfWeek();
-                $query->whereBetween('basic_start_date', [
-                    $weekStart->toDateString(),
-                    $weekEnd->toDateString()
-                ]);
-                \Log::info('📅 Filtering by this week: ' . $weekStart->toDateString() . ' to ' . $weekEnd->toDateString());
+                // Orders for this week in Jakarta timezone (Monday to Sunday)
+                $weekStart = \Carbon\Carbon::now($timezone)->startOfWeek()->toDateString();
+                $weekEnd = \Carbon\Carbon::now($timezone)->endOfWeek()->toDateString();
+                $query->where(function($q) use ($weekStart, $weekEnd) {
+                    $q->whereBetween('basic_start_date', [$weekStart, $weekEnd])
+                      ->orWhereBetween('basic_finish_date', [$weekStart, $weekEnd])
+                      ->orWhere(function($q2) use ($weekStart, $weekEnd) {
+                          $q2->where('basic_start_date', '<=', $weekStart)
+                             ->where('basic_finish_date', '>=', $weekEnd);
+                      });
+                });
+                \Log::info('📅 Filtering by this week (Jakarta): ' . $weekStart . ' to ' . $weekEnd);
                 break;
                 
             case 'monthly':
-                // Orders starting this month
-                $query->whereMonth('basic_start_date', now()->month)
-                      ->whereYear('basic_start_date', now()->year);
-                \Log::info('📅 Filtering by this month: ' . now()->format('F Y'));
+                // Orders for this month in Jakarta timezone
+                $startOfMonth = \Carbon\Carbon::now($timezone)->startOfMonth()->toDateString();
+                $endOfMonth = \Carbon\Carbon::now($timezone)->endOfMonth()->toDateString();
+                $query->where(function($q) use ($startOfMonth, $endOfMonth) {
+                    $q->whereBetween('basic_start_date', [$startOfMonth, $endOfMonth])
+                      ->orWhereBetween('basic_finish_date', [$startOfMonth, $endOfMonth])
+                      ->orWhere(function($q2) use ($startOfMonth, $endOfMonth) {
+                          $q2->where('basic_start_date', '<=', $startOfMonth)
+                             ->where('basic_finish_date', '>=', $endOfMonth);
+                      });
+                });
+                \Log::info('📅 Filtering by this month (Jakarta): ' . \Carbon\Carbon::now($timezone)->format('F Y'));
                 break;
                 
-            case 'all':
+            case 'date_range':
+                // Custom date range selected by user
+                $startDate = $request->input('start_date');
+                $endDate = $request->input('end_date');
+                
+                if ($startDate && $endDate) {
+                    // Parse dates in Jakarta timezone
+                    $start = \Carbon\Carbon::parse($startDate, $timezone)->startOfDay()->toDateString();
+                    $end = \Carbon\Carbon::parse($endDate, $timezone)->endOfDay()->toDateString();
+                    
+                    $query->where(function($q) use ($start, $end) {
+                        $q->whereBetween('basic_start_date', [$start, $end])
+                          ->orWhereBetween('basic_finish_date', [$start, $end])
+                          ->orWhere(function($q2) use ($start, $end) {
+                              $q2->where('basic_start_date', '<=', $start)
+                                 ->where('basic_finish_date', '>=', $end);
+                          });
+                    });
+                    
+                    \Log::info('📅 Filtering by date range (Jakarta): ' . $start . ' to ' . $end);
+                } else {
+                    \Log::warning('⚠️ Date range filter selected but dates not provided');
+                    // Return empty result or error
+                    $response = response()->json([
+                        'success' => false,
+                        'message' => 'Start date and end date are required for date range filter',
+                        'data' => [],
+                        'filter_applied' => $filter,
+                        'count' => 0
+                    ], 400);
+                    
+                    return $this->addCorsHeaders($response);
+                }
+                break;
+                
             default:
-                // No filter applied
-                \Log::info('📅 No date filter applied - showing all orders');
+                // Default to daily if filter not recognized
+                $today = \Carbon\Carbon::now($timezone)->toDateString();
+                $query->whereDate('basic_start_date', '<=', $today)
+                      ->whereDate('basic_finish_date', '>=', $today);
+                \Log::info('📅 Unknown filter, defaulting to today (Jakarta): ' . $today);
                 break;
         }
         
@@ -231,7 +285,8 @@ public function getProOrders(Request $request): JsonResponse
             'message' => 'Pro orders fetched successfully',
             'data' => $proOrders,
             'filter_applied' => $filter,
-            'count' => $proOrders->count()
+            'count' => $proOrders->count(),
+            'timezone' => $timezone
         ]);
         
         return $this->addCorsHeaders($response);
