@@ -10,6 +10,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\DB;
 use App\Models\DataTimbangan;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 
 use Exception;
 
@@ -161,55 +164,91 @@ public function getMaterials(): JsonResponse
     }
 }
 
-    // Add this method to fetch pro_order data for the dropdowns
+
 // Updated method to fetch pro_order data with optional date filtering
+// Updated method to fetch pro_order data from SAP API with optional date filtering
 public function getProOrders(Request $request): JsonResponse
 {
     try {
         $filter = $request->input('filter', 'daily');
         
-        \Log::info('🔄 Fetching pro orders for task creation with filter: ' . $filter);
+        \Log::info('🔄 Fetching pro orders from SAP API with filter: ' . $filter);
         
         // Set timezone to Jakarta
         $timezone = 'Asia/Jakarta';
         
-        // Start building the query
-        $query = DB::table('pro_order')
-            ->select([
-                'order_id',
-                'material_id', 
-                'material_desc',
-                'plant',
-                'production_version',
-                'batch',
-                'order_quantity',
-                'unit_of_measure',
-                'basic_start_date',
-                'basic_finish_date',
-                'material_code'
-            ]);
+        // SAP API Configuration
+        $sapBaseUrl = env('SAP_BASE_URL', 'https://192.104.210.16:44320');
+        $sapClient = env('SAP_CLIENT', '210');
+        $sapUsername = env('SAP_USERNAME', 'OJTECHIT01');
+        $sapPassword = env('SAP_PASSWORD', '@DragonForce.7');
         
-        // Apply date filters (all based on Jakarta timezone)
+        // Determine period for SAP API (YYYY-MM format)
+        $period = \Carbon\Carbon::now($timezone)->format('Y-m');
+        
+        // Build SAP OData URL
+        $sapUrl = "{$sapBaseUrl}/sap/opu/odata4/sap/zpp_oji_pro/srvd/sap/zpp_oji_pro/0001/" .
+                  "ZPP_PRO_LIST(period='{$period}')/Set?\$top=999999";
+        
+        \Log::info('📡 SAP API URL: ' . $sapUrl);
+        
+        // Make request to SAP API using Laravel HTTP Client
+        $response = \Illuminate\Support\Facades\Http::withBasicAuth($sapUsername, $sapPassword)
+            ->withHeaders([
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json',
+                'sap-client' => $sapClient,
+            ])
+            ->withOptions([
+                'verify' => false, // Disable SSL verification for self-signed certificates
+            ])
+            ->timeout(30)
+            ->get($sapUrl);
+        
+        \Log::info('📥 SAP API Response Status: ' . $response->status());
+        
+        if (!$response->successful()) {
+            \Log::error('❌ SAP API Error: Status ' . $response->status());
+            $errorResponse = response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch data from SAP API',
+                'status_code' => $response->status(),
+                'error' => $response->body()
+            ], 500);
+            return $this->addCorsHeaders($errorResponse);
+        }
+        
+        $sapData = $response->json();
+        
+        // Extract data from SAP response (SAP OData returns data in 'value' array)
+        $proOrders = collect($sapData['value'] ?? []);
+        
+        \Log::info('✅ Fetched ' . $proOrders->count() . ' orders from SAP');
+        
+        // Apply date filters based on filter type
         switch ($filter) {
             case 'daily':
                 // Orders for today in Jakarta timezone
                 $today = \Carbon\Carbon::now($timezone)->toDateString();
-                $query->whereDate('basic_start_date', '<=', $today)
-                      ->whereDate('basic_finish_date', '>=', $today);
+                $proOrders = $proOrders->filter(function($order) use ($today) {
+                    $startDate = $order['StartDate'] ?? null;
+                    $endDate = $order['EndDate'] ?? null;
+                    return $startDate <= $today && $endDate >= $today;
+                });
                 \Log::info('📅 Filtering by today (Jakarta): ' . $today);
                 break;
                 
             case 'weekly':
-                // Orders for this week in Jakarta timezone (Monday to Sunday)
+                // Orders for this week in Jakarta timezone
                 $weekStart = \Carbon\Carbon::now($timezone)->startOfWeek()->toDateString();
                 $weekEnd = \Carbon\Carbon::now($timezone)->endOfWeek()->toDateString();
-                $query->where(function($q) use ($weekStart, $weekEnd) {
-                    $q->whereBetween('basic_start_date', [$weekStart, $weekEnd])
-                      ->orWhereBetween('basic_finish_date', [$weekStart, $weekEnd])
-                      ->orWhere(function($q2) use ($weekStart, $weekEnd) {
-                          $q2->where('basic_start_date', '<=', $weekStart)
-                             ->where('basic_finish_date', '>=', $weekEnd);
-                      });
+                $proOrders = $proOrders->filter(function($order) use ($weekStart, $weekEnd) {
+                    $startDate = $order['StartDate'] ?? null;
+                    $endDate = $order['EndDate'] ?? null;
+                    
+                    return ($startDate >= $weekStart && $startDate <= $weekEnd) ||
+                           ($endDate >= $weekStart && $endDate <= $weekEnd) ||
+                           ($startDate <= $weekStart && $endDate >= $weekEnd);
                 });
                 \Log::info('📅 Filtering by this week (Jakarta): ' . $weekStart . ' to ' . $weekEnd);
                 break;
@@ -218,13 +257,13 @@ public function getProOrders(Request $request): JsonResponse
                 // Orders for this month in Jakarta timezone
                 $startOfMonth = \Carbon\Carbon::now($timezone)->startOfMonth()->toDateString();
                 $endOfMonth = \Carbon\Carbon::now($timezone)->endOfMonth()->toDateString();
-                $query->where(function($q) use ($startOfMonth, $endOfMonth) {
-                    $q->whereBetween('basic_start_date', [$startOfMonth, $endOfMonth])
-                      ->orWhereBetween('basic_finish_date', [$startOfMonth, $endOfMonth])
-                      ->orWhere(function($q2) use ($startOfMonth, $endOfMonth) {
-                          $q2->where('basic_start_date', '<=', $startOfMonth)
-                             ->where('basic_finish_date', '>=', $endOfMonth);
-                      });
+                $proOrders = $proOrders->filter(function($order) use ($startOfMonth, $endOfMonth) {
+                    $startDate = $order['StartDate'] ?? null;
+                    $endDate = $order['EndDate'] ?? null;
+                    
+                    return ($startDate >= $startOfMonth && $startDate <= $endOfMonth) ||
+                           ($endDate >= $startOfMonth && $endDate <= $endOfMonth) ||
+                           ($startDate <= $startOfMonth && $endDate >= $endOfMonth);
                 });
                 \Log::info('📅 Filtering by this month (Jakarta): ' . \Carbon\Carbon::now($timezone)->format('F Y'));
                 break;
@@ -235,71 +274,101 @@ public function getProOrders(Request $request): JsonResponse
                 $endDate = $request->input('end_date');
                 
                 if ($startDate && $endDate) {
-                    // Parse dates in Jakarta timezone
                     $start = \Carbon\Carbon::parse($startDate, $timezone)->startOfDay()->toDateString();
                     $end = \Carbon\Carbon::parse($endDate, $timezone)->endOfDay()->toDateString();
                     
-                    $query->where(function($q) use ($start, $end) {
-                        $q->whereBetween('basic_start_date', [$start, $end])
-                          ->orWhereBetween('basic_finish_date', [$start, $end])
-                          ->orWhere(function($q2) use ($start, $end) {
-                              $q2->where('basic_start_date', '<=', $start)
-                                 ->where('basic_finish_date', '>=', $end);
-                          });
+                    $proOrders = $proOrders->filter(function($order) use ($start, $end) {
+                        $orderStart = $order['StartDate'] ?? null;
+                        $orderEnd = $order['EndDate'] ?? null;
+                        
+                        return ($orderStart >= $start && $orderStart <= $end) ||
+                               ($orderEnd >= $start && $orderEnd <= $end) ||
+                               ($orderStart <= $start && $orderEnd >= $end);
                     });
                     
                     \Log::info('📅 Filtering by date range (Jakarta): ' . $start . ' to ' . $end);
                 } else {
                     \Log::warning('⚠️ Date range filter selected but dates not provided');
-                    // Return empty result or error
-                    $response = response()->json([
+                    $errorResponse = response()->json([
                         'success' => false,
                         'message' => 'Start date and end date are required for date range filter',
                         'data' => [],
                         'filter_applied' => $filter,
                         'count' => 0
                     ], 400);
-                    
-                    return $this->addCorsHeaders($response);
+                    return $this->addCorsHeaders($errorResponse);
                 }
                 break;
                 
             default:
                 // Default to daily if filter not recognized
                 $today = \Carbon\Carbon::now($timezone)->toDateString();
-                $query->whereDate('basic_start_date', '<=', $today)
-                      ->whereDate('basic_finish_date', '>=', $today);
+                $proOrders = $proOrders->filter(function($order) use ($today) {
+                    $startDate = $order['StartDate'] ?? null;
+                    $endDate = $order['EndDate'] ?? null;
+                    return $startDate <= $today && $endDate >= $today;
+                });
                 \Log::info('📅 Unknown filter, defaulting to today (Jakarta): ' . $today);
                 break;
         }
         
-        // Execute query with ordering
-        $proOrders = $query->orderBy('order_id')
-                          ->orderBy('batch')
-                          ->get();
+        // Transform SAP field names to match your app's expected format
+        $transformedOrders = $proOrders->map(function($order) {
+            return [
+                'order_id' => $order['ProductionOrder'] ?? null,
+                'material_id' => $order['ItemNo'] ?? null,
+                'material_desc' => $order['ItemMaterial'] ?? null,
+                'material_code' => $order['ItemNo'] ?? null,
+                'plant' => null, // Not in SAP response, set default if needed
+                'production_version' => null, // Not in SAP response
+                'batch' => null, // Not in SAP response
+                'order_quantity' => $order['ProQty'] ?? null,
+                'unit_of_measure' => $order['UoM'] ?? null,
+                'basic_start_date' => $order['StartDate'] ?? null,
+                'basic_finish_date' => $order['EndDate'] ?? null,
+            ];
+        })->values();
         
-        \Log::info('✅ Found ' . $proOrders->count() . ' pro orders after filtering');
+        \Log::info('✅ Found ' . $transformedOrders->count() . ' pro orders after filtering');
         
         $response = response()->json([
             'success' => true,
-            'message' => 'Pro orders fetched successfully',
-            'data' => $proOrders,
+            'message' => 'Pro orders fetched successfully from SAP',
+            'data' => $transformedOrders,
             'filter_applied' => $filter,
-            'count' => $proOrders->count(),
-            'timezone' => $timezone
+            'count' => $transformedOrders->count(),
+            'timezone' => $timezone,
+            'source' => 'SAP API'
         ]);
         
         return $this->addCorsHeaders($response);
-    } catch (Exception $e) {
-        \Log::error('❌ Error fetching pro orders: ' . $e->getMessage());
         
-        $response = response()->json([
+    } catch (\Illuminate\Http\Client\ConnectionException $e) {
+        \Log::error('❌ Cannot connect to SAP server: ' . $e->getMessage());
+        $errorResponse = response()->json([
+            'success' => false,
+            'message' => 'Cannot connect to SAP server',
+            'error' => $e->getMessage()
+        ], 503);
+        return $this->addCorsHeaders($errorResponse);
+        
+    } catch (\Illuminate\Http\Client\RequestException $e) {
+        \Log::error('❌ SAP API request error: ' . $e->getMessage());
+        $errorResponse = response()->json([
+            'success' => false,
+            'message' => 'SAP API request failed',
+            'error' => $e->getMessage()
+        ], 500);
+        return $this->addCorsHeaders($errorResponse);
+        
+    } catch (\Exception $e) {
+        \Log::error('❌ Error fetching pro orders: ' . $e->getMessage());
+        $errorResponse = response()->json([
             'success' => false,
             'message' => 'Failed to fetch pro orders',
             'error' => $e->getMessage()
         ], 500);
-        
-        return $this->addCorsHeaders($response);
+        return $this->addCorsHeaders($errorResponse);
     }
 }
 
