@@ -313,21 +313,22 @@ public function getProOrders(Request $request): JsonResponse
         }
         
         // Transform SAP field names to match your app's expected format
-        $transformedOrders = $proOrders->map(function($order) {
-            return [
-                'order_id' => $order['ProductionOrder'] ?? null,
-                'material_id' => $order['ItemNo'] ?? null,
-                'material_desc' => $order['ItemMaterial'] ?? null,
-                'material_code' => $order['ItemNo'] ?? null,
-                'plant' => null, // Not in SAP response, set default if needed
-                'production_version' => null, // Not in SAP response
-                'batch' => null, // Not in SAP response
-                'order_quantity' => $order['ProQty'] ?? null,
-                'unit_of_measure' => $order['UoM'] ?? null,
-                'basic_start_date' => $order['StartDate'] ?? null,
-                'basic_finish_date' => $order['EndDate'] ?? null,
-            ];
-        })->values();
+$transformedOrders = $proOrders->map(function($order) {
+    return [
+        'order_id' => $order['ProNo'] ?? null,           // ✅ Changed from 'ProductionOrder'
+        'material_id' => $order['ItemNo'] ?? null,
+        'material_desc' => $order['Materialname'] ?? null, // ✅ Changed from 'ItemMaterial'
+        'material_code' => $order['MaterialCode'] ?? null, // ✅ Changed from 'ItemNo'
+        'plant' => $order['Plant'] ?? null,              // ✅ Now available
+        'sloc' => $order['Sloc'] ?? null,                // ✅ Storage location
+        'batch' => $order['BatchNo'] ?? null,            // ✅ THIS WAS NULL BEFORE!
+        'order_quantity' => $order['QtyPro'] ?? null,    // ✅ Changed from 'ProQty'
+        'confirmed_quantity' => $order['QtyConfirm'] ?? null, // ✅ Added
+        'unit_of_measure' => $order['UnitPro'] ?? null,  // ✅ Changed from 'UoM'
+        'basic_start_date' => $order['StartDate'] ?? null,
+        'basic_finish_date' => $order['EndDate'] ?? null,
+    ];
+})->values();
         
         \Log::info('✅ Found ' . $transformedOrders->count() . ' pro orders after filtering');
         
