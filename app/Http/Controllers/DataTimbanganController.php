@@ -90,6 +90,7 @@ class DataTimbanganController extends Controller
                 'nik' => $user->nik,
                 'inisial' => $user->inisial,
                 'starting_counter_pro' => $startingCounter,
+                'shift_id' => $user->group,
                 'weight_uom' => 'GR',
                 'session_status' => 'open',
                 'created_at' => now(),
@@ -1079,19 +1080,6 @@ public function saveMqttWeight(Request $request)
         // Store in Redis with scale-specific key (expires after 30 seconds)
         $redisKey = "mqtt:weight:{$timbanganName}";
         Redis::setex($redisKey, 30, json_encode($weightData));
-        
-        // Optional: Also store in database for history
-        /*
-        DB::table('mqtt_weights')->insert([
-            'timbangan_name' => $timbanganName,
-            'weight_kg' => $weightKg,
-            'weight_grams' => $weightGrams,
-            'unit' => 'g',
-            'stable' => $stable,
-            'created_at' => now(),
-            'updated_at' => now()
-        ]);
-        */
         
         Log::info('MQTT weight data saved', [
             'scale' => $timbanganName,
