@@ -183,8 +183,68 @@ public function getMaterials(): JsonResponse
         }
     }
 
+    // NEW: Helper method to verify order exists in SAP
+    private function verifySapOrder(string $orderNo, string $batchNumber): bool
+    {
+        try {
+            \Log::info('🔍 Verifying order in SAP API', [
+                'order_no' => $orderNo,
+                'batch_number' => $batchNumber
+            ]);
+
+            // Get current month for SAP query
+            $period = \Carbon\Carbon::now('Asia/Jakarta')->format('Y-m');
+            
+            // SAP API Configuration
+            $sapBaseUrl = env('SAP_BASE_URL', 'https://192.104.210.16:44320');
+            $sapClient = env('SAP_CLIENT', '210');
+            $sapUsername = env('SAP_USERNAME', 'OJTECHIT01');
+            $sapPassword = env('SAP_PASSWORD', '@DragonForce.7');
+            
+            $sapUrl = "{$sapBaseUrl}/sap/opu/odata4/sap/zpp_oji_pro/srvd/sap/zpp_oji_pro/0001/" .
+                      "ZPP_PRO_LIST(period='{$period}')/Set?\$top=999999";
+            
+            $response = Http::withBasicAuth($sapUsername, $sapPassword)
+                ->withHeaders([
+                    'Accept' => 'application/json',
+                    'Content-Type' => 'application/json',
+                    'sap-client' => $sapClient,
+                ])
+                ->withOptions(['verify' => false])
+                ->timeout(30)
+                ->get($sapUrl);
+            
+            if (!$response->successful()) {
+                \Log::error('❌ SAP API verification failed: Status ' . $response->status());
+                return false;
+            }
+            
+            $sapData = $response->json();
+            $proOrders = collect($sapData['value'] ?? []);
+            
+            // Check if order with matching ProNo and BatchNo exists
+            $orderExists = $proOrders->contains(function($order) use ($orderNo, $batchNumber) {
+                return ($order['ProNo'] ?? null) === $orderNo && 
+                       ($order['BatchNo'] ?? null) === $batchNumber;
+            });
+            
+            \Log::info($orderExists ? '✅ Order verified in SAP' : '❌ Order not found in SAP', [
+                'order_no' => $orderNo,
+                'batch_number' => $batchNumber
+            ]);
+            
+            return $orderExists;
+            
+        } catch (Exception $e) {
+            \Log::error('❌ Error verifying SAP order: ' . $e->getMessage());
+            // On error, we'll allow the creation to proceed (fail-open approach)
+            // You can change this to return false if you want strict validation
+            return true;
+        }
+    }
+
 // Updated method to fetch pro_order data with optional date filtering
-// method to fetch data from SAP
+// Updated method to fetch pro_order data from SAP API with optional date filtering
 public function getProOrders(Request $request): JsonResponse
 {
     try {
@@ -811,65 +871,6 @@ public function getOrdersByGroup($groupCode): JsonResponse
             ], 500);
             
             return $this->addCorsHeaders($response);
-        }
-    }
-    // NEW: Helper method to verify order exists in SAP
-    private function verifySapOrder(string $orderNo, string $batchNumber): bool
-    {
-        try {
-            \Log::info('🔍 Verifying order in SAP API', [
-                'order_no' => $orderNo,
-                'batch_number' => $batchNumber
-            ]);
-
-            // Get current month for SAP query
-            $period = \Carbon\Carbon::now('Asia/Jakarta')->format('Y-m');
-            
-            // SAP API Configuration
-            $sapBaseUrl = env('SAP_BASE_URL', 'https://192.104.210.16:44320');
-            $sapClient = env('SAP_CLIENT', '210');
-            $sapUsername = env('SAP_USERNAME', 'OJTECHIT01');
-            $sapPassword = env('SAP_PASSWORD', '@DragonForce.7');
-            
-            $sapUrl = "{$sapBaseUrl}/sap/opu/odata4/sap/zpp_oji_pro/srvd/sap/zpp_oji_pro/0001/" .
-                      "ZPP_PRO_LIST(period='{$period}')/Set?\$top=999999";
-            
-            $response = Http::withBasicAuth($sapUsername, $sapPassword)
-                ->withHeaders([
-                    'Accept' => 'application/json',
-                    'Content-Type' => 'application/json',
-                    'sap-client' => $sapClient,
-                ])
-                ->withOptions(['verify' => false])
-                ->timeout(30)
-                ->get($sapUrl);
-            
-            if (!$response->successful()) {
-                \Log::error('❌ SAP API verification failed: Status ' . $response->status());
-                return false;
-            }
-            
-            $sapData = $response->json();
-            $proOrders = collect($sapData['value'] ?? []);
-            
-            // Check if order with matching ProNo and BatchNo exists
-            $orderExists = $proOrders->contains(function($order) use ($orderNo, $batchNumber) {
-                return ($order['ProNo'] ?? null) === $orderNo && 
-                       ($order['BatchNo'] ?? null) === $batchNumber;
-            });
-            
-            \Log::info($orderExists ? '✅ Order verified in SAP' : '❌ Order not found in SAP', [
-                'order_no' => $orderNo,
-                'batch_number' => $batchNumber
-            ]);
-            
-            return $orderExists;
-            
-        } catch (Exception $e) {
-            \Log::error('❌ Error verifying SAP order: ' . $e->getMessage());
-            // On error, we'll allow the creation to proceed (fail-open approach)
-            // You can change this to return false if you want strict validation
-            return true;
         }
     }
 }
