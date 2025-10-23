@@ -183,7 +183,6 @@ public function getMaterials(): JsonResponse
         }
     }
 
-    // NEW: Helper method to verify order exists in SAP
     private function verifySapOrder(string $orderNo, string $batchNumber): bool
     {
         try {
@@ -192,10 +191,8 @@ public function getMaterials(): JsonResponse
                 'batch_number' => $batchNumber
             ]);
 
-            // Get current month for SAP query
             $period = \Carbon\Carbon::now('Asia/Jakarta')->format('Y-m');
-            
-            // SAP API Configuration
+
             $sapBaseUrl = env('SAP_BASE_URL', 'https://192.104.210.16:44320');
             $sapClient = env('SAP_CLIENT', '210');
             $sapUsername = env('SAP_USERNAME', 'OJTECHIT01');
@@ -244,7 +241,6 @@ public function getMaterials(): JsonResponse
     }
 
 // Updated method to fetch pro_order data with optional date filtering
-// Updated method to fetch pro_order data from SAP API with optional date filtering
 public function getProOrders(Request $request): JsonResponse
 {
     try {
@@ -252,25 +248,25 @@ public function getProOrders(Request $request): JsonResponse
         
         \Log::info('🔄 Fetching pro orders from SAP API with filter: ' . $filter);
         
-        // Set timezone to Jakarta
+       
         $timezone = 'Asia/Jakarta';
         
-        // SAP API Configuration
+        // SAP Configuration
         $sapBaseUrl = env('SAP_BASE_URL', 'https://192.104.210.16:44320');
         $sapClient = env('SAP_CLIENT', '210');
         $sapUsername = env('SAP_USERNAME', 'OJTECHIT01');
         $sapPassword = env('SAP_PASSWORD', '@DragonForce.7');
         
-        // Determine period for SAP API (YYYY-MM format)
+
         $period = \Carbon\Carbon::now($timezone)->format('Y-m');
         
-        // Build SAP OData URL
+        
         $sapUrl = "{$sapBaseUrl}/sap/opu/odata4/sap/zpp_oji_pro/srvd/sap/zpp_oji_pro/0001/" .
                   "ZPP_PRO_LIST(period='{$period}')/Set?\$top=999999";
         
         \Log::info('📡 SAP API URL: ' . $sapUrl);
         
-        // Make request to SAP API using Laravel HTTP Client
+      
         $response = \Illuminate\Support\Facades\Http::withBasicAuth($sapUsername, $sapPassword)
             ->withHeaders([
                 'Accept' => 'application/json',
@@ -298,7 +294,6 @@ public function getProOrders(Request $request): JsonResponse
         
         $sapData = $response->json();
         
-        // Extract data from SAP response (SAP OData returns data in 'value' array)
         $proOrders = collect($sapData['value'] ?? []);
         
         \Log::info('✅ Fetched ' . $proOrders->count() . ' orders from SAP');
