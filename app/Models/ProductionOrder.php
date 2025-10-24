@@ -32,7 +32,8 @@ class ProductionOrder extends Model
         'quantity_fulfilled',
         'shift_id',
         'is_approved',
-        'assigned_group_code'
+        'assigned_group_code',
+        'order_status'  // ← Added this
     ];
 
     protected $casts = [
@@ -50,7 +51,20 @@ class ProductionOrder extends Model
         'shift_id' => null,
         'is_approved' => null,
         'assigned_group_code' => null,
+        'order_status' => 'active'  // ← Added this with default value
     ];
+
+    // ← Added these scopes for easy filtering
+    public function scopeActive($query)
+    {
+        return $query->where('order_status', 'active');
+    }
+    
+    public function scopeInactive($query)
+    {
+        return $query->where('order_status', 'inactive');
+    }
+
 
     // ============= CHANGELOG TRACKING =============
     

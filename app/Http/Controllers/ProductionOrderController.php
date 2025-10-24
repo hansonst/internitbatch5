@@ -617,53 +617,66 @@ $transformedOrders = $proOrders->map(function($order) {
         }
     }
 
-    // Delete a production order by batch number
-    public function destroy($batchNumber): JsonResponse
-    {
-        try {
-            \Log::info('🗑️ Deleting production order with batch number: ' . $batchNumber);
-            
-            $productionOrder = ProductionOrder::where('batch_number', $batchNumber)->first();
-            
-            if (!$productionOrder) {
-                \Log::warning('❌ Production order not found with batch number: ' . $batchNumber);
-                $response = response()->json([
-                    'success' => false,
-                    'message' => 'Production order not found'
-                ], 404);
-                
-                return $this->addCorsHeaders($response);
-            }
-            
-            $deletedOrderInfo = [
-                'no_pro' => $productionOrder->no_pro,
-                'batch_number' => $productionOrder->batch_number,
-                'material_desc' => $productionOrder->material_desc
-            ];
-            
-            $productionOrder->delete();
-            
-            \Log::info('✅ Production order deleted successfully: ' . $deletedOrderInfo['no_pro']);
-
-            $response = response()->json([
-                'success' => true,
-                'message' => 'Production order deleted successfully',
-                'deleted_order' => $deletedOrderInfo
-            ]);
-            
-            return $this->addCorsHeaders($response);
-        } catch (Exception $e) {
-            \Log::error('❌ Error deleting production order: ' . $e->getMessage());
-            
+    // Soft delete a production order by changing status to inactive
+public function destroy($batchNumber): JsonResponse
+{
+    try {
+        \Log::info('🗑️ Soft deleting production order with batch number: ' . $batchNumber);
+        
+        $productionOrder = ProductionOrder::where('batch_number', $batchNumber)->first();
+        
+        if (!$productionOrder) {
+            \Log::warning('❌ Production order not found with batch number: ' . $batchNumber);
             $response = response()->json([
                 'success' => false,
-                'message' => 'Failed to delete production order',
-                'error' => $e->getMessage()
-            ], 500);
+                'message' => 'Production order not found'
+            ], 404);
             
             return $this->addCorsHeaders($response);
         }
+        
+        // Check if already inactive
+        if ($productionOrder->order_status === 'inactive') {
+            \Log::warning('⚠️ Production order already inactive: ' . $batchNumber);
+            $response = response()->json([
+                'success' => false,
+                'message' => 'Production order is already inactive'
+            ], 400);
+            
+            return $this->addCorsHeaders($response);
+        }
+        
+        $deletedOrderInfo = [
+            'no_pro' => $productionOrder->no_pro,
+            'batch_number' => $productionOrder->batch_number,
+            'material_desc' => $productionOrder->material_desc
+        ];
+        
+        // Change status to inactive instead of deleting
+        $productionOrder->order_status = 'inactive';
+        $productionOrder->save();
+        
+        \Log::info('✅ Production order status changed to inactive: ' . $deletedOrderInfo['no_pro']);
+
+        $response = response()->json([
+            'success' => true,
+            'message' => 'Production order deactivated successfully',
+            'deleted_order' => $deletedOrderInfo
+        ]);
+        
+        return $this->addCorsHeaders($response);
+    } catch (Exception $e) {
+        \Log::error('❌ Error deactivating production order: ' . $e->getMessage());
+        
+        $response = response()->json([
+            'success' => false,
+            'message' => 'Failed to deactivate production order',
+            'error' => $e->getMessage()
+        ], 500);
+        
+        return $this->addCorsHeaders($response);
     }
+}
 
     // Handle OPTIONS requests for CORS
     public function options()
