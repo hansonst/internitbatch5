@@ -678,6 +678,78 @@ public function destroy($batchNumber): JsonResponse
     }
 }
 
+public function close($batchNumber): JsonResponse
+{
+    try {
+        \Log::info('🔒 Closing production order with batch number: ' . $batchNumber);
+        
+        $productionOrder = ProductionOrder::where('batch_number', $batchNumber)->first();
+        
+        if (!$productionOrder) {
+            \Log::warning('❌ Production order not found with batch number: ' . $batchNumber);
+            $response = response()->json([
+                'success' => false,
+                'message' => 'Production order not found'
+            ], 404);
+            
+            return $this->addCorsHeaders($response);
+        }
+        
+        // Check if already pending
+        if ($productionOrder->order_status === 'pending') {
+            \Log::warning('⚠️ Production order already pending: ' . $batchNumber);
+            $response = response()->json([
+                'success' => false,
+                'message' => 'Production order is already pending'
+            ], 400);
+            
+            return $this->addCorsHeaders($response);
+        }
+        
+        // Check if already inactive
+        if ($productionOrder->order_status === 'inactive') {
+            \Log::warning('⚠️ Cannot close an inactive production order: ' . $batchNumber);
+            $response = response()->json([
+                'success' => false,
+                'message' => 'Cannot close an inactive production order'
+            ], 400);
+            
+            return $this->addCorsHeaders($response);
+        }
+        
+        $closedOrderInfo = [
+            'no_pro' => $productionOrder->no_pro,
+            'batch_number' => $productionOrder->batch_number,
+            'material_desc' => $productionOrder->material_desc,
+            'previous_status' => $productionOrder->order_status
+        ];
+        
+        // Change status to pending
+        $productionOrder->order_status = 'pending';
+        $productionOrder->save();
+        
+        \Log::info('✅ Production order status changed to pending: ' . $closedOrderInfo['no_pro']);
+
+        $response = response()->json([
+            'success' => true,
+            'message' => 'Production order closed successfully (marked as pending)',
+            'closed_order' => $closedOrderInfo
+        ]);
+        
+        return $this->addCorsHeaders($response);
+    } catch (Exception $e) {
+        \Log::error('❌ Error closing production order: ' . $e->getMessage());
+        
+        $response = response()->json([
+            'success' => false,
+            'message' => 'Failed to close production order',
+            'error' => $e->getMessage()
+        ], 500);
+        
+        return $this->addCorsHeaders($response);
+    }
+}
+
     // Handle OPTIONS requests for CORS
     public function options()
     {

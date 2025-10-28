@@ -59,6 +59,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{batchNumber}', [ProductionOrderController::class, 'show']);
         Route::put('/{batchNumber}', [ProductionOrderController::class, 'update']);
         Route::delete('/{batchNumber}', [ProductionOrderController::class, 'destroy']);
+        Route::patch('/{batchNumber}/close', [ProductionOrderController::class, 'close']); // 🆕 NEW: Close order (mark as pending)
         Route::put('/{batchNumber}/assign-group', [ProductionOrderController::class, 'assignGroup']);
         Route::patch('/{batchNumber}/remove-group', [ProductionOrderController::class, 'removeGroup']);
         Route::post('/{batchNumber}/start-shift', [ProductionOrderController::class, 'startShift']);
