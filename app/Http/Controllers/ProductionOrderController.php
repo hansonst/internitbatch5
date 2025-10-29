@@ -682,8 +682,11 @@ public function close($batchNumber): JsonResponse
 {
     try {
         \Log::info('🔒 Closing production order with batch number: ' . $batchNumber);
+        \Log::info('🔍 Request data: ' . json_encode(request()->all()));
         
         $productionOrder = ProductionOrder::where('batch_number', $batchNumber)->first();
+        
+        \Log::info('🔍 Found order: ' . ($productionOrder ? 'YES' : 'NO'));
         
         if (!$productionOrder) {
             \Log::warning('❌ Production order not found with batch number: ' . $batchNumber);
@@ -694,6 +697,8 @@ public function close($batchNumber): JsonResponse
             
             return $this->addCorsHeaders($response);
         }
+        
+        \Log::info('🔍 Current order_status: ' . ($productionOrder->order_status ?? 'NULL'));
         
         // Check if already pending
         if ($productionOrder->order_status === 'pending') {
@@ -717,8 +722,6 @@ public function close($batchNumber): JsonResponse
             return $this->addCorsHeaders($response);
         }
         
-        // 🆕 REMOVED: Don't check if sessions are closed - admin can close anytime
-        
         $closedOrderInfo = [
             'no_pro' => $productionOrder->no_pro,
             'batch_number' => $productionOrder->batch_number,
@@ -726,7 +729,9 @@ public function close($batchNumber): JsonResponse
             'previous_status' => $productionOrder->order_status
         ];
         
-        // Change status to pending - admin override
+        \Log::info('🔍 About to save order_status = pending');
+        
+        // Change status to pending
         $productionOrder->order_status = 'pending';
         $productionOrder->save();
         
@@ -741,6 +746,7 @@ public function close($batchNumber): JsonResponse
         return $this->addCorsHeaders($response);
     } catch (Exception $e) {
         \Log::error('❌ Error closing production order: ' . $e->getMessage());
+        \Log::error('❌ Stack trace: ' . $e->getTraceAsString());
         
         $response = response()->json([
             'success' => false,
