@@ -717,6 +717,8 @@ public function close($batchNumber): JsonResponse
             return $this->addCorsHeaders($response);
         }
         
+        // 🆕 REMOVED: Don't check if sessions are closed - admin can close anytime
+        
         $closedOrderInfo = [
             'no_pro' => $productionOrder->no_pro,
             'batch_number' => $productionOrder->batch_number,
@@ -724,11 +726,11 @@ public function close($batchNumber): JsonResponse
             'previous_status' => $productionOrder->order_status
         ];
         
-        // Change status to pending
+        // Change status to pending - admin override
         $productionOrder->order_status = 'pending';
         $productionOrder->save();
         
-        \Log::info('✅ Production order status changed to pending: ' . $closedOrderInfo['no_pro']);
+        \Log::info('✅ Production order manually closed by admin: ' . $closedOrderInfo['no_pro']);
 
         $response = response()->json([
             'success' => true,
