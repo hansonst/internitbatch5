@@ -241,14 +241,13 @@ class Changelog extends Model
         });
     }
 
-    // ============= ACCESSOR METHODS =============
     
     /**
      * Get formatted timestamp
      */
     public function getFormattedTimestampAttribute()
     {
-        return $this->timestamp->format('Y-m-d H:i:s');
+        return $this->timestamp->timezone('Asia/Jakarta')->format('d M Y, H:i:s');
     }
 
     /**
