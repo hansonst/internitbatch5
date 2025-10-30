@@ -50,6 +50,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('production-orders')->group(function () {
         Route::get('/', [ProductionOrderController::class, 'index']);
         Route::post('/', [ProductionOrderController::class, 'store']);
+        Route::get('/production-orders/batches', [YourController::class, 'getBatchesByOrderId']);
         
         // Specific routes (must come before parameterized routes)
         Route::get('/unassigned', [ProductionOrderController::class, 'getUnassignedOrders']);

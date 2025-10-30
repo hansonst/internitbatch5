@@ -217,6 +217,20 @@ public function getMaterials(): JsonResponse
             }
             
             $sapData = $response->json();
+            $sapData = $response->json();
+
+// ADD THIS DEBUG:
+\Log::info('🔍 RAW SAP Data - First 2 orders:');
+if (!empty($sapData['value'])) {
+    $firstTwo = array_slice($sapData['value'], 0, 2);
+    foreach ($firstTwo as $order) {
+        \Log::info('ProNo: ' . ($order['ProNo'] ?? 'NULL') . 
+                   ', BatchNo: ' . ($order['BatchNo'] ?? 'NULL') . 
+                   ', Material: ' . ($order['Materialname'] ?? 'NULL'));
+    }
+}
+
+$proOrders = collect($sapData['value'] ?? []);
             $proOrders = collect($sapData['value'] ?? []);
             
             // Check if order with matching ProNo and BatchNo exists
@@ -402,7 +416,23 @@ $transformedOrders = $proOrders->map(function($order) {
         'basic_finish_date' => $order['EndDate'] ?? null,
     ];
 })->values();
-        
+        $transformedOrders = $proOrders->map(function($order) {
+    return [
+        'order_id' => $order['ProNo'] ?? null,
+        // ... rest of mapping
+    ];
+})->values();
+
+// ADD THIS DEBUG:
+\Log::info('🔍 TRANSFORMED Data - First 2 orders:');
+if ($transformedOrders->count() > 0) {
+    $firstTwo = $transformedOrders->take(2);
+    foreach ($firstTwo as $order) {
+        \Log::info('order_id: ' . ($order['order_id'] ?? 'NULL') . 
+                   ', batch: ' . ($order['batch'] ?? 'NULL') . 
+                   ', material_desc: ' . ($order['material_desc'] ?? 'NULL'));
+    }
+}
         \Log::info('✅ Found ' . $transformedOrders->count() . ' pro orders after filtering');
         
         $response = response()->json([
@@ -446,6 +476,53 @@ $transformedOrders = $proOrders->map(function($order) {
     }
 }
 
+// Get batches for a specific production order
+public function getBatchesByOrderId(Request $request): JsonResponse
+{
+    try {
+        $orderId = $request->input('order_id'); // or 'no_pro'
+        
+        \Log::info('🔍 Fetching batches for order: ' . $orderId);
+        
+        // Query production_order table by no_pro (the order ID from SAP)
+        $batches = \DB::table('production_order')
+            ->where('no_pro', $orderId)
+            ->select(
+                'batch_number',
+                'transaction_id',
+                'material_id',
+                'material_desc',
+                'machine_id',
+                'machine_name',
+                'manufacturing_date',
+                'finish_date',
+                'quantity_required',
+                'shift_id'
+            )
+            ->orderBy('created_at', 'desc')
+            ->get();
+        
+        \Log::info('✅ Found ' . $batches->count() . ' batches');
+        
+        $response = response()->json([
+            'success' => true,
+            'message' => 'Batches fetched successfully',
+            'data' => $batches,
+            'count' => $batches->count()
+        ]);
+        
+        return $this->addCorsHeaders($response);
+        
+    } catch (\Exception $e) {
+        \Log::error('❌ Error fetching batches: ' . $e->getMessage());
+        $errorResponse = response()->json([
+            'success' => false,
+            'message' => 'Failed to fetch batches',
+            'error' => $e->getMessage()
+        ], 500);
+        return $this->addCorsHeaders($errorResponse);
+    }
+}
     // Fetch machines for dropdown
     public function getMachines(): JsonResponse
     {
