@@ -233,6 +233,17 @@ if (!empty($sapData['value'])) {
 $proOrders = collect($sapData['value'] ?? []);
             $proOrders = collect($sapData['value'] ?? []);
             
+            \Log::info('🔍 RAW SAP Data - First order BEFORE filtering:');
+if ($proOrders->count() > 0) {
+    $sample = $proOrders->first();
+    \Log::info('ProNo: ' . ($sample['ProNo'] ?? 'NULL'));
+    \Log::info('BatchNo: ' . ($sample['BatchNo'] ?? 'NULL'));
+    \Log::info('Materialname: ' . ($sample['Materialname'] ?? 'NULL'));
+    \Log::info('Full order: ' . json_encode($sample));
+}
+
+\Log::info('✅ Fetched ' . $proOrders->count() . ' orders from SAP');
+
             // Check if order with matching ProNo and BatchNo exists
             $orderExists = $proOrders->contains(function($order) use ($orderNo, $batchNumber) {
                 return ($order['ProNo'] ?? null) === $orderNo && 
