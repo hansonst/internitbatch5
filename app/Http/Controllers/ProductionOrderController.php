@@ -436,23 +436,7 @@ $transformedOrders = $proOrders->map(function($order) {
         'basic_finish_date' => $order['EndDate'] ?? null,
     ];
 })->values();
-        $transformedOrders = $proOrders->map(function($order) {
-    return [
-        'order_id' => $order['ProNo'] ?? null,
-        // ... rest of mapping
-    ];
-})->values();
 
-// ADD THIS DEBUG:
-\Log::info('🔍 TRANSFORMED Data - First 2 orders:');
-if ($transformedOrders->count() > 0) {
-    $firstTwo = $transformedOrders->take(2);
-    foreach ($firstTwo as $order) {
-        \Log::info('order_id: ' . ($order['order_id'] ?? 'NULL') . 
-                   ', batch: ' . ($order['batch'] ?? 'NULL') . 
-                   ', material_desc: ' . ($order['material_desc'] ?? 'NULL'));
-    }
-}
         \Log::info('✅ Found ' . $transformedOrders->count() . ' pro orders after filtering');
         
         $response = response()->json([
