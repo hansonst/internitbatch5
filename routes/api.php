@@ -21,6 +21,8 @@ Route::get('health', function () {
 Route::post('/check-active-shift-with-perbox', [DataTimbanganController::class, 'checkActiveShiftWithPerbox']);
 Route::get('/data-timbangan-perbox/{data_timbangan_id}', [DataTimbanganController::class, 'getWeightEntries']);
 Route::get('/pro-orders', [ProductionOrderController::class, 'getProOrders']);
+// ✅ ADD: Public batch fetching for task creation
+Route::get('/production-orders/batches', [ProductionOrderController::class, 'getBatchesByOrderId']);
 
 // Authentication routes (public)
 Route::post('/login', [LoginController::class, 'login'])->name('login');

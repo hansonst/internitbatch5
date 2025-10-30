@@ -483,6 +483,7 @@ $transformedOrders = $proOrders->map(function($order) {
 // Get batches for a specific production order
 // Replace your getBatchesByOrderId method with this:
 // Replace your getBatchesByOrderId method with this:
+// Replace your getBatchesByOrderId method with this improved version:
 public function getBatchesByOrderId(Request $request): JsonResponse
 {
     try {
@@ -500,7 +501,6 @@ public function getBatchesByOrderId(Request $request): JsonResponse
         \Log::info('🔍 Fetching batches from SAP for order: ' . $orderId);
         
         $timezone = 'Asia/Jakarta';
-        $period = \Carbon\Carbon::now($timezone)->format('Y-m');
         
         // SAP Configuration
         $sapBaseUrl = env('SAP_BASE_URL', 'https://192.104.210.16:44320');
@@ -508,48 +508,82 @@ public function getBatchesByOrderId(Request $request): JsonResponse
         $sapUsername = env('SAP_USERNAME', 'OJTECHIT01');
         $sapPassword = env('SAP_PASSWORD', '@DragonForce.7');
         
-        $sapUrl = "{$sapBaseUrl}/sap/opu/odata4/sap/zpp_oji_pro/srvd/sap/zpp_oji_pro/0001/" .
-                  "ZPP_PRO_LIST(period='{$period}')/Set?\$top=999999";
+        // ✅ Try multiple periods (current month and last 3 months)
+        $periods = [
+            \Carbon\Carbon::now($timezone)->format('Y-m'),           // 2025-10
+            \Carbon\Carbon::now($timezone)->subMonth()->format('Y-m'), // 2025-09
+            \Carbon\Carbon::now($timezone)->subMonths(2)->format('Y-m'), // 2025-08
+            \Carbon\Carbon::now($timezone)->subMonths(3)->format('Y-m'), // 2025-07
+        ];
         
-        \Log::info('📡 Fetching from SAP API: ' . $sapUrl);
+        \Log::info('📅 Searching in periods: ' . implode(', ', $periods));
         
-        $response = \Illuminate\Support\Facades\Http::withBasicAuth($sapUsername, $sapPassword)
-            ->withHeaders([
-                'Accept' => 'application/json',
-                'Content-Type' => 'application/json',
-                'sap-client' => $sapClient,
-            ])
-            ->withOptions(['verify' => false])
-            ->timeout(30)
-            ->get($sapUrl);
+        $allMatchingOrders = collect();
         
-        if (!$response->successful()) {
-            \Log::error('❌ SAP API Error: Status ' . $response->status());
-            $errorResponse = response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch data from SAP API',
-                'status_code' => $response->status(),
-                'data' => []
-            ], 500);
-            return $this->addCorsHeaders($errorResponse);
+        foreach ($periods as $period) {
+            \Log::info("🔍 Checking period: {$period}");
+            
+            $sapUrl = "{$sapBaseUrl}/sap/opu/odata4/sap/zpp_oji_pro/srvd/sap/zpp_oji_pro/0001/" .
+                      "ZPP_PRO_LIST(period='{$period}')/Set?\$top=999999";
+            
+            try {
+                $response = \Illuminate\Support\Facades\Http::withBasicAuth($sapUsername, $sapPassword)
+                    ->withHeaders([
+                        'Accept' => 'application/json',
+                        'Content-Type' => 'application/json',
+                        'sap-client' => $sapClient,
+                    ])
+                    ->withOptions(['verify' => false])
+                    ->timeout(30)
+                    ->get($sapUrl);
+                
+                if (!$response->successful()) {
+                    \Log::warning("⚠️ Failed to fetch from period {$period}: Status " . $response->status());
+                    continue;
+                }
+                
+                $sapData = $response->json();
+                $orders = collect($sapData['value'] ?? []);
+                
+                \Log::info("  📦 Found {$orders->count()} orders in period {$period}");
+                
+                // Filter for matching order ID
+                $matchingInPeriod = $orders->filter(function($order) use ($orderId) {
+                    return ($order['ProNo'] ?? null) === $orderId;
+                });
+                
+                if ($matchingInPeriod->count() > 0) {
+                    \Log::info("  ✅ Found {$matchingInPeriod->count()} matching orders in period {$period}");
+                    $allMatchingOrders = $allMatchingOrders->merge($matchingInPeriod);
+                }
+            } catch (\Exception $e) {
+                \Log::warning("⚠️ Error fetching period {$period}: " . $e->getMessage());
+                continue;
+            }
         }
         
-        $sapData = $response->json();
-        $allOrders = collect($sapData['value'] ?? []);
+        \Log::info('📊 Total matching orders across all periods: ' . $allMatchingOrders->count());
         
-        \Log::info('✅ Fetched ' . $allOrders->count() . ' total orders from SAP');
+        if ($allMatchingOrders->isEmpty()) {
+            \Log::warning('❌ No orders found for ProNo: ' . $orderId . ' in any period');
+            
+            $response = response()->json([
+                'success' => true,
+                'message' => 'No batches found for this production order in the last 4 months',
+                'data' => [],
+                'count' => 0,
+                'order_id' => $orderId,
+                'periods_searched' => $periods,
+                'source' => 'SAP API'
+            ]);
+            
+            return $this->addCorsHeaders($response);
+        }
         
-        // Filter orders by ProNo (order_id)
-        $matchingOrders = $allOrders->filter(function($order) use ($orderId) {
-            return ($order['ProNo'] ?? null) === $orderId;
-        });
-        
-        \Log::info('🔍 Found ' . $matchingOrders->count() . ' matching orders for ProNo: ' . $orderId);
-        
-        // ✅ Transform to batches format with batch numbers!
-        $batches = $matchingOrders->map(function($order) {
+        // ✅ Transform to batches format with batch numbers
+        $batches = $allMatchingOrders->map(function($order) {
             return [
-                'batch_number' => $order['BatchNo'] ?? null,  // ✅ This is the key field!
+                'batch_number' => $order['BatchNo'] ?? null,
                 'order_id' => $order['ProNo'] ?? null,
                 'material_id' => $order['ItemNo'] ?? null,
                 'material_desc' => $order['Materialname'] ?? null,
@@ -564,23 +598,66 @@ public function getBatchesByOrderId(Request $request): JsonResponse
             ];
         })->values();
         
-        // ✅ Only remove batches that have explicitly null batch_number
-        $validBatches = $batches->filter(function($batch) {
+        // Remove batches that have null batch_number
+        $batches = $batches->filter(function($batch) {
             return !is_null($batch['batch_number']) && $batch['batch_number'] !== '';
         })->values();
         
-        \Log::info('✅ Returning ' . $validBatches->count() . ' valid batches with batch numbers');
+        \Log::info('📊 Found ' . $batches->count() . ' batches from SAP (before filtering existing)');
         
-        // Log each batch for debugging
-        foreach ($validBatches as $batch) {
-            \Log::info('  📦 Batch: ' . $batch['batch_number'] . ' for order ' . $batch['order_id']);
+        // ✅ NEW: Filter out batches that already exist in production_order table
+        $existingBatches = \DB::table('production_order')
+            ->where('no_pro', $orderId)
+            ->pluck('batch_number')
+            ->toArray();
+        
+        \Log::info('🔍 Existing batches in DB for order ' . $orderId . ': ' . implode(', ', $existingBatches));
+        
+        $availableBatches = $batches->filter(function($batch) use ($existingBatches) {
+            $batchNumber = $batch['batch_number'];
+            $exists = in_array($batchNumber, $existingBatches);
+            
+            if ($exists) {
+                \Log::info('  ❌ Batch ' . $batchNumber . ' already exists in production_order table');
+            } else {
+                \Log::info('  ✅ Batch ' . $batchNumber . ' is available');
+            }
+            
+            return !$exists;
+        })->values();
+        
+        \Log::info('✅ Returning ' . $availableBatches->count() . ' available batches (after filtering existing)');
+        
+        // Log each available batch
+        foreach ($availableBatches as $batch) {
+            \Log::info('  📦 Available Batch: ' . $batch['batch_number'] . ' (Period from ' . 
+                      $batch['manufacturing_date'] . ' to ' . $batch['finish_date'] . ')');
+        }
+        
+        // ✅ If all batches already exist, return appropriate message
+        if ($availableBatches->isEmpty() && $batches->isNotEmpty()) {
+            \Log::warning('⚠️ All batches for order ' . $orderId . ' have already been created');
+            
+            $response = response()->json([
+                'success' => true,
+                'message' => 'All batches for this production order have already been created',
+                'data' => [],
+                'count' => 0,
+                'total_batches_in_sap' => $batches->count(),
+                'existing_batches' => $existingBatches,
+                'source' => 'SAP API'
+            ]);
+            
+            return $this->addCorsHeaders($response);
         }
         
         $response = response()->json([
             'success' => true,
             'message' => 'Batches fetched successfully from SAP',
-            'data' => $validBatches,
-            'count' => $validBatches->count(),
+            'data' => $availableBatches,
+            'count' => $availableBatches->count(),
+            'total_in_sap' => $batches->count(),
+            'already_used' => count($existingBatches),
             'source' => 'SAP API'
         ]);
         
