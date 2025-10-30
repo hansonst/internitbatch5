@@ -21,8 +21,6 @@ Route::get('health', function () {
 Route::post('/check-active-shift-with-perbox', [DataTimbanganController::class, 'checkActiveShiftWithPerbox']);
 Route::get('/data-timbangan-perbox/{data_timbangan_id}', [DataTimbanganController::class, 'getWeightEntries']);
 Route::get('/pro-orders', [ProductionOrderController::class, 'getProOrders']);
-// ✅ ADD: Public batch fetching for task creation
-Route::get('/production-orders/batches', [ProductionOrderController::class, 'getBatchesByOrderId']);
 
 // Authentication routes (public)
 Route::post('/login', [LoginController::class, 'login'])->name('login');
@@ -53,7 +51,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', [ProductionOrderController::class, 'index']);
         Route::post('/', [ProductionOrderController::class, 'store']);
         
-        // ✅ NEW: Fetch batches by order ID - MUST BE BEFORE parameterized routes
+        // ✅ Fetch batches by order ID - MUST BE BEFORE parameterized routes
         Route::get('/batches', [ProductionOrderController::class, 'getBatchesByOrderId']);
         
         // Specific routes (must come before parameterized routes)
