@@ -50,7 +50,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('production-orders')->group(function () {
         Route::get('/', [ProductionOrderController::class, 'index']);
         Route::post('/', [ProductionOrderController::class, 'store']);
-        Route::get('/production-orders/batches', [YourController::class, 'getBatchesByOrderId']);
+        
+        // ✅ NEW: Fetch batches by order ID - MUST BE BEFORE parameterized routes
+        Route::get('/batches', [ProductionOrderController::class, 'getBatchesByOrderId']);
         
         // Specific routes (must come before parameterized routes)
         Route::get('/unassigned', [ProductionOrderController::class, 'getUnassignedOrders']);
@@ -60,7 +62,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{batchNumber}', [ProductionOrderController::class, 'show']);
         Route::put('/{batchNumber}', [ProductionOrderController::class, 'update']);
         Route::delete('/{batchNumber}', [ProductionOrderController::class, 'destroy']);
-        Route::patch('/{batchNumber}/close', [ProductionOrderController::class, 'close']); // 🆕 NEW: Close order (mark as pending)
+        Route::patch('/{batchNumber}/close', [ProductionOrderController::class, 'close']);
         Route::put('/{batchNumber}/assign-group', [ProductionOrderController::class, 'assignGroup']);
         Route::patch('/{batchNumber}/remove-group', [ProductionOrderController::class, 'removeGroup']);
         Route::post('/{batchNumber}/start-shift', [ProductionOrderController::class, 'startShift']);
