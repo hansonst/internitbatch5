@@ -481,48 +481,122 @@ $transformedOrders = $proOrders->map(function($order) {
 }
 
 // Get batches for a specific production order
+// Replace your getBatchesByOrderId method with this:
 public function getBatchesByOrderId(Request $request): JsonResponse
 {
     try {
-        $orderId = $request->input('order_id'); // or 'no_pro'
+        $orderId = $request->input('order_id');
         
-        \Log::info('🔍 Fetching batches for order: ' . $orderId);
+        if (!$orderId) {
+            $errorResponse = response()->json([
+                'success' => false,
+                'message' => 'Order ID is required',
+                'data' => []
+            ], 400);
+            return $this->addCorsHeaders($errorResponse);
+        }
         
-        // Query production_order table by no_pro (the order ID from SAP)
-        $batches = \DB::table('production_order')
-            ->where('no_pro', $orderId)
-            ->select(
-                'batch_number',
-                'transaction_id',
-                'material_id',
-                'material_desc',
-                'machine_id',
-                'machine_name',
-                'manufacturing_date',
-                'finish_date',
-                'quantity_required',
-                'shift_id'
-            )
-            ->orderBy('created_at', 'desc')
-            ->get();
+        \Log::info('🔍 Fetching batches from SAP for order: ' . $orderId);
         
-        \Log::info('✅ Found ' . $batches->count() . ' batches');
+        $timezone = 'Asia/Jakarta';
+        $period = \Carbon\Carbon::now($timezone)->format('Y-m');
+        
+        // SAP Configuration
+        $sapBaseUrl = env('SAP_BASE_URL', 'https://192.104.210.16:44320');
+        $sapClient = env('SAP_CLIENT', '210');
+        $sapUsername = env('SAP_USERNAME', 'OJTECHIT01');
+        $sapPassword = env('SAP_PASSWORD', '@DragonForce.7');
+        
+        $sapUrl = "{$sapBaseUrl}/sap/opu/odata4/sap/zpp_oji_pro/srvd/sap/zpp_oji_pro/0001/" .
+                  "ZPP_PRO_LIST(period='{$period}')/Set?\$top=999999";
+        
+        \Log::info('📡 Fetching from SAP API: ' . $sapUrl);
+        
+        $response = \Illuminate\Support\Facades\Http::withBasicAuth($sapUsername, $sapPassword)
+            ->withHeaders([
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json',
+                'sap-client' => $sapClient,
+            ])
+            ->withOptions(['verify' => false])
+            ->timeout(30)
+            ->get($sapUrl);
+        
+        if (!$response->successful()) {
+            \Log::error('❌ SAP API Error: Status ' . $response->status());
+            $errorResponse = response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch data from SAP API',
+                'status_code' => $response->status(),
+                'data' => []
+            ], 500);
+            return $this->addCorsHeaders($errorResponse);
+        }
+        
+        $sapData = $response->json();
+        $allOrders = collect($sapData['value'] ?? []);
+        
+        \Log::info('✅ Fetched ' . $allOrders->count() . ' total orders from SAP');
+        
+        // Filter orders by ProNo (order_id)
+        $matchingOrders = $allOrders->filter(function($order) use ($orderId) {
+            return ($order['ProNo'] ?? null) === $orderId;
+        });
+        
+        \Log::info('🔍 Found ' . $matchingOrders->count() . ' matching orders for ProNo: ' . $orderId);
+        
+        // Transform to batches format
+        $batches = $matchingOrders->map(function($order) {
+            return [
+                'batch_number' => $order['BatchNo'] ?? null,
+                'order_id' => $order['ProNo'] ?? null,
+                'material_id' => $order['ItemNo'] ?? null,
+                'material_desc' => $order['Materialname'] ?? null,
+                'material_code' => $order['MaterialCode'] ?? null,
+                'plant' => $order['Plant'] ?? null,
+                'sloc' => $order['Sloc'] ?? null,
+                'quantity_required' => $order['QtyPro'] ?? null,
+                'confirmed_quantity' => $order['QtyConfirm'] ?? null,
+                'unit_of_measure' => $order['UnitPro'] ?? null,
+                'manufacturing_date' => $order['StartDate'] ?? null,
+                'finish_date' => $order['EndDate'] ?? null,
+            ];
+        })->values();
+        
+        // Remove batches that have null batch_number
+        $batches = $batches->filter(function($batch) {
+            return !empty($batch['batch_number']);
+        })->values();
+        
+        \Log::info('✅ Returning ' . $batches->count() . ' valid batches');
         
         $response = response()->json([
             'success' => true,
-            'message' => 'Batches fetched successfully',
+            'message' => 'Batches fetched successfully from SAP',
             'data' => $batches,
-            'count' => $batches->count()
+            'count' => $batches->count(),
+            'source' => 'SAP API'
         ]);
         
         return $this->addCorsHeaders($response);
+        
+    } catch (\Illuminate\Http\Client\ConnectionException $e) {
+        \Log::error('❌ Cannot connect to SAP server: ' . $e->getMessage());
+        $errorResponse = response()->json([
+            'success' => false,
+            'message' => 'Cannot connect to SAP server',
+            'error' => $e->getMessage(),
+            'data' => []
+        ], 503);
+        return $this->addCorsHeaders($errorResponse);
         
     } catch (\Exception $e) {
         \Log::error('❌ Error fetching batches: ' . $e->getMessage());
         $errorResponse = response()->json([
             'success' => false,
-            'message' => 'Failed to fetch batches',
-            'error' => $e->getMessage()
+            'message' => 'Failed to fetch batches from SAP',
+            'error' => $e->getMessage(),
+            'data' => []
         ], 500);
         return $this->addCorsHeaders($errorResponse);
     }
