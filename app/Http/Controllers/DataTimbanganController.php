@@ -22,122 +22,140 @@ class DataTimbanganController extends Controller
         return response()->json([], 200);
     }
     public function startShift(Request $request)
-    {
-        try {
-            $validator = Validator::make($request->all(), [
-                'batch_number' => 'required|string|exists:production_order,batch_number',
-                'starting_counter_pro' => 'required|numeric|min:0'
-            ]);
+{
+    try {
+        $validator = Validator::make($request->all(), [
+            'batch_number' => 'required|string|exists:production_order,batch_number',
+            'starting_counter_pro' => 'required|numeric|min:0'
+        ]);
 
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Validation failed',
-                    'errors' => $validator->errors()
-                ], 422);
-            }
-
-            $user = $request->user();
-            $batchNumber = $request->batch_number;
-            $startingCounter = $request->starting_counter_pro;
-
-            DB::beginTransaction();
-
-            // Check if user already has an active session
-            $existingSession = DataTimbangan::where('nik', $user->nik)
-                ->where('session_status', 'open')
-                ->whereNull('ending_counter_pro')
-                ->first();
-                
-            if ($existingSession) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'You already have an active shift session. Please end it first.',
-                    'active_session' => [
-                        'batch_number' => $existingSession->batch_number,
-                        'started_at' => $existingSession->created_at,
-                        'data_timbangan_id' => $existingSession->id
-                    ]
-                ], 409);
-            }
-
-            // Check if batch already has an active session
-            $batchSession = DataTimbangan::where('batch_number', $batchNumber)
-                ->where('session_status', 'open')
-                ->whereNull('ending_counter_pro')
-                ->first();
-
-            if ($batchSession) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'This batch already has an active shift session.',
-                    'active_operator' => $batchSession->nik
-                ], 409);
-            }
-
-            // Get production order details
-            $productionOrder = ProductionOrder::where('batch_number', $batchNumber)->first();
-            if (!$productionOrder) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Production order not found'
-                ], 404);
-            }
-
-            // Create the shift session - this is now the only requirement for digital scales access
-            $shiftSession = DataTimbangan::create([
-                'batch_number' => $batchNumber,
-                'nik' => $user->nik,
-                'inisial' => $user->inisial,
-                'starting_counter_pro' => $startingCounter,
-                'shift_id' => $user->group,
-                'weight_uom' => 'GR',
-                'session_status' => 'open',
-                'created_at' => now(),
-            ]);
-
-            DB::commit();
-
-            Log::info("Shift started successfully", [
-                'shift_id' => $shiftSession->id,
-                'batch_number' => $batchNumber,
-                'nik' => $user->nik,
-                'starting_counter' => $startingCounter,
-                'timestamp' => now()
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Shift started successfully. You can now access digital scales.',
-                'data' => [
-                    'shift_id' => $shiftSession->id,
-                    'data_timbangan_id' => $shiftSession->id,
-                    'batch_number' => $batchNumber,
-                    'material_desc' => $productionOrder->material_desc,
-                    'machine_name' => $productionOrder->machine_name,
-                    'starting_counter_pro' => $startingCounter,
-                    'session_status' => 'open',
-                    'created_at' => $shiftSession->created_at
-                ]
-            ], 201);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            
-            Log::error("Failed to start shift", [
-                'user_nik' => $request->user()->nik ?? 'unknown',
-                'batch_number' => $request->batch_number ?? 'unknown',
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'timestamp' => now()
-            ]);
-
+        if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to start shift: ' . $e->getMessage()
-            ], 500);
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
         }
+
+        $user = $request->user();
+        $batchNumber = $request->batch_number;
+        $startingCounter = $request->starting_counter_pro;
+
+        DB::beginTransaction();
+
+        // Check if user already has an active session
+        $existingSession = DataTimbangan::where('nik', $user->nik)
+            ->where('session_status', 'open')
+            ->whereNull('ending_counter_pro')
+            ->first();
+            
+        if ($existingSession) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'You already have an active shift session. Please end it first.',
+                'active_session' => [
+                    'batch_number' => $existingSession->batch_number,
+                    'started_at' => $existingSession->created_at,
+                    'data_timbangan_id' => $existingSession->id
+                ]
+            ], 409);
+        }
+
+        // Check if batch already has an active session
+        $batchSession = DataTimbangan::where('batch_number', $batchNumber)
+            ->where('session_status', 'open')
+            ->whereNull('ending_counter_pro')
+            ->first();
+
+        if ($batchSession) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'This batch already has an active shift session.',
+                'active_operator' => $batchSession->nik
+            ], 409);
+        }
+
+        // Get production order details with transaction_id
+        $productionOrder = ProductionOrder::where('batch_number', $batchNumber)
+            ->where('status', 'active')
+            ->first();
+            
+        if (!$productionOrder) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Active production order not found for batch: ' . $batchNumber
+            ], 404);
+        }
+
+        // Verify transaction_id exists
+        if (empty($productionOrder->transaction_id)) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Production order is missing transaction_id'
+            ], 400);
+        }
+
+        // Create the shift session with transaction_id
+        $shiftSession = DataTimbangan::create([
+            'transaction_id' => $productionOrder->transaction_id, // ← Added
+            'batch_number' => $batchNumber,
+            'nik' => $user->nik,
+            'inisial' => $user->inisial,
+            'starting_counter_pro' => $startingCounter,
+            'shift_id' => $user->group,
+            'weight_uom' => 'GR',
+            'session_status' => 'open',
+            'created_at' => now(),
+        ]);
+
+        DB::commit();
+
+        Log::info("Shift started successfully", [
+            'shift_id' => $shiftSession->id,
+            'transaction_id' => $productionOrder->transaction_id, // ← Added to log
+            'batch_number' => $batchNumber,
+            'nik' => $user->nik,
+            'starting_counter' => $startingCounter,
+            'timestamp' => now()
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Shift started successfully. You can now access digital scales.',
+            'data' => [
+                'shift_id' => $shiftSession->id,
+                'data_timbangan_id' => $shiftSession->id,
+                'transaction_id' => $productionOrder->transaction_id, // ← Added to response
+                'batch_number' => $batchNumber,
+                'material_desc' => $productionOrder->material_desc,
+                'machine_name' => $productionOrder->machine_name,
+                'starting_counter_pro' => $startingCounter,
+                'session_status' => 'open',
+                'created_at' => $shiftSession->created_at
+            ]
+        ], 201);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        
+        Log::error("Failed to start shift", [
+            'user_nik' => $request->user()->nik ?? 'unknown',
+            'batch_number' => $request->batch_number ?? 'unknown',
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+            'timestamp' => now()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to start shift: ' . $e->getMessage()
+        ], 500);
     }
+}
 
     /**
      * End current shift session
