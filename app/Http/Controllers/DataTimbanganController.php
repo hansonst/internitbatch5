@@ -79,7 +79,7 @@ class DataTimbanganController extends Controller
 
         // Get production order details with transaction_id
         $productionOrder = ProductionOrder::where('batch_number', $batchNumber)
-            ->where('status', 'active')
+            ->where('order_status', 'active') // ← Changed from 'status' to 'order_status'
             ->first();
             
         if (!$productionOrder) {
@@ -101,7 +101,7 @@ class DataTimbanganController extends Controller
 
         // Create the shift session with transaction_id
         $shiftSession = DataTimbangan::create([
-            'transaction_id' => $productionOrder->transaction_id, // ← Added
+            'transaction_id' => $productionOrder->transaction_id,
             'batch_number' => $batchNumber,
             'nik' => $user->nik,
             'inisial' => $user->inisial,
@@ -116,7 +116,7 @@ class DataTimbanganController extends Controller
 
         Log::info("Shift started successfully", [
             'shift_id' => $shiftSession->id,
-            'transaction_id' => $productionOrder->transaction_id, // ← Added to log
+            'transaction_id' => $productionOrder->transaction_id,
             'batch_number' => $batchNumber,
             'nik' => $user->nik,
             'starting_counter' => $startingCounter,
@@ -129,7 +129,7 @@ class DataTimbanganController extends Controller
             'data' => [
                 'shift_id' => $shiftSession->id,
                 'data_timbangan_id' => $shiftSession->id,
-                'transaction_id' => $productionOrder->transaction_id, // ← Added to response
+                'transaction_id' => $productionOrder->transaction_id,
                 'batch_number' => $batchNumber,
                 'material_desc' => $productionOrder->material_desc,
                 'machine_name' => $productionOrder->machine_name,
