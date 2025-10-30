@@ -482,6 +482,7 @@ $transformedOrders = $proOrders->map(function($order) {
 
 // Get batches for a specific production order
 // Replace your getBatchesByOrderId method with this:
+// Replace your getBatchesByOrderId method with this:
 public function getBatchesByOrderId(Request $request): JsonResponse
 {
     try {
@@ -545,10 +546,10 @@ public function getBatchesByOrderId(Request $request): JsonResponse
         
         \Log::info('🔍 Found ' . $matchingOrders->count() . ' matching orders for ProNo: ' . $orderId);
         
-        // Transform to batches format
+        // ✅ Transform to batches format with batch numbers!
         $batches = $matchingOrders->map(function($order) {
             return [
-                'batch_number' => $order['BatchNo'] ?? null,
+                'batch_number' => $order['BatchNo'] ?? null,  // ✅ This is the key field!
                 'order_id' => $order['ProNo'] ?? null,
                 'material_id' => $order['ItemNo'] ?? null,
                 'material_desc' => $order['Materialname'] ?? null,
@@ -563,18 +564,23 @@ public function getBatchesByOrderId(Request $request): JsonResponse
             ];
         })->values();
         
-        // Remove batches that have null batch_number
-        $batches = $batches->filter(function($batch) {
-            return !empty($batch['batch_number']);
+        // ✅ Only remove batches that have explicitly null batch_number
+        $validBatches = $batches->filter(function($batch) {
+            return !is_null($batch['batch_number']) && $batch['batch_number'] !== '';
         })->values();
         
-        \Log::info('✅ Returning ' . $batches->count() . ' valid batches');
+        \Log::info('✅ Returning ' . $validBatches->count() . ' valid batches with batch numbers');
+        
+        // Log each batch for debugging
+        foreach ($validBatches as $batch) {
+            \Log::info('  📦 Batch: ' . $batch['batch_number'] . ' for order ' . $batch['order_id']);
+        }
         
         $response = response()->json([
             'success' => true,
             'message' => 'Batches fetched successfully from SAP',
-            'data' => $batches,
-            'count' => $batches->count(),
+            'data' => $validBatches,
+            'count' => $validBatches->count(),
             'source' => 'SAP API'
         ]);
         
