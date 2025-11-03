@@ -118,7 +118,8 @@ class ProductionOrder extends Model
             $description,
             $user->nik,
             $this->batch_number,
-            $additionalData
+            $additionalData,
+            $this->transaction_id  // ADDED: Pass transaction_id
         );
     }
 
@@ -156,7 +157,8 @@ class ProductionOrder extends Model
             $description,
             $user->nik,
             $this->batch_number,
-            $additionalData
+            $additionalData,
+            $this->transaction_id  // ADDED: Pass transaction_id
         );
     }
 
@@ -188,7 +190,8 @@ class ProductionOrder extends Model
             $description,
             $user->nik,
             $this->batch_number,
-            $additionalData
+            $additionalData,
+            $this->transaction_id  // ADDED: Pass transaction_id
         );
     }
 
@@ -210,12 +213,20 @@ class ProductionOrder extends Model
             'shift_id' => 'Shift',
             'is_approved' => 'Approval Status',
             'assigned_group_code' => 'Assigned Group',
+            'order_status' => 'Order Status',  // ADDED: Added order_status to field names
         ];
 
         // Special case for approval
         if (in_array('is_approved', $changedFields)) {
             $status = $changes['is_approved'] ? 'approved' : 'unapproved';
             return "Production order {$this->batch_number} has been {$status}";
+        }
+
+        // Special case for order status
+        if (in_array('order_status', $changedFields) && count($changedFields) === 1) {
+            $old = $original['order_status'] ?? 'unknown';
+            $new = $changes['order_status'];
+            return "Updated order_status for production order {$this->batch_number}";
         }
 
         // Special case for quantity fulfilled
@@ -294,7 +305,8 @@ class ProductionOrder extends Model
                 'quantity_required' => (float) $this->quantity_required,
                 'quantity_fulfilled' => (float) $this->quantity_fulfilled,
                 'approved_at' => now()->toDateTimeString(),
-            ]
+            ],
+            $this->transaction_id  // ADDED: Pass transaction_id
         );
     }
 
@@ -316,7 +328,8 @@ class ProductionOrder extends Model
             [
                 'reason' => $reason,
                 'rejected_at' => now()->toDateTimeString(),
-            ]
+            ],
+            $this->transaction_id  // ADDED: Pass transaction_id
         );
     }
 
@@ -357,6 +370,15 @@ class ProductionOrder extends Model
             ->orderBy('timestamp', 'desc');
     }
 
+    /**
+     * Get all changelogs for this production order by transaction_id
+     */
+    public function changelogsByTransaction()
+    {
+        return $this->hasMany(Changelog::class, 'transaction_id', 'transaction_id')
+            ->orderBy('timestamp', 'desc');
+    }
+
     // ============= HELPER METHODS =============
     
     public function isLocked()
@@ -389,6 +411,28 @@ class ProductionOrder extends Model
     public function getChangeHistory()
     {
         return $this->changelogs()
+            ->with('user')
+            ->get()
+            ->map(function($log) {
+                return [
+                    'timestamp' => $log->formatted_timestamp,
+                    'time_ago' => $log->time_ago,
+                    'action' => $log->action_type,
+                    'description' => $log->description,
+                    'user' => $log->user_name,
+                    'user_nik' => $log->user_nik,
+                    'user_role' => $log->user_role,
+                    'details' => $log->additional_data,
+                ];
+            });
+    }
+    
+    /**
+     * Get changelog history for this production order by transaction_id
+     */
+    public function getChangeHistoryByTransaction()
+    {
+        return $this->changelogsByTransaction()
             ->with('user')
             ->get()
             ->map(function($log) {
