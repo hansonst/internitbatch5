@@ -18,6 +18,7 @@ class Changelog extends Model
         'user_nik',
         'user_role',
         'batch_number',
+        'transaction_id',  // ADDED: transaction_id field
         'additional_data',
         'timestamp',
     ];
@@ -49,9 +50,10 @@ class Changelog extends Model
      * @param string $userNik - NIK of user performing action
      * @param string|null $batchNumber - Related batch number (optional)
      * @param array $additionalData - Extra data to store (optional)
+     * @param string|null $transactionId - Related transaction ID (optional)
      * @return Changelog|null
      */
-    public static function log($actionType, $description, $userNik, $batchNumber = null, $additionalData = [])
+    public static function log($actionType, $description, $userNik, $batchNumber = null, $additionalData = [], $transactionId = null)
     {
         try {
             // Get user info from database
@@ -67,6 +69,7 @@ class Changelog extends Model
                     'user_nik' => $userNik,
                     'user_role' => 'USER',
                     'batch_number' => $batchNumber,
+                    'transaction_id' => $transactionId,  // ADDED
                     'additional_data' => $additionalData,
                     'timestamp' => now(),
                 ]);
@@ -88,6 +91,7 @@ class Changelog extends Model
                 'user_nik' => $userNik,
                 'user_role' => $userRole,
                 'batch_number' => $batchNumber,
+                'transaction_id' => $transactionId,  // ADDED
                 'additional_data' => $additionalData,
                 'timestamp' => now(),
             ]);
@@ -110,9 +114,10 @@ class Changelog extends Model
      * @param string $description
      * @param string|null $batchNumber
      * @param array $additionalData
+     * @param string|null $transactionId
      * @return Changelog|null
      */
-    public static function logAuth($actionType, $description, $batchNumber = null, $additionalData = [])
+    public static function logAuth($actionType, $description, $batchNumber = null, $additionalData = [], $transactionId = null)
     {
         $user = \Illuminate\Support\Facades\Auth::user();
         
@@ -121,7 +126,7 @@ class Changelog extends Model
             return null;
         }
 
-        return self::log($actionType, $description, $user->nik, $batchNumber, $additionalData);
+        return self::log($actionType, $description, $user->nik, $batchNumber, $additionalData, $transactionId);
     }
 
     // ============= RELATIONSHIPS =============
@@ -140,6 +145,14 @@ class Changelog extends Model
     public function productionOrder()
     {
         return $this->belongsTo(ProductionOrder::class, 'batch_number', 'batch_number');
+    }
+
+    /**
+     * Get the related production order by transaction_id
+     */
+    public function productionOrderByTransaction()
+    {
+        return $this->belongsTo(ProductionOrder::class, 'transaction_id', 'transaction_id');
     }
 
     // ============= QUERY SCOPES =============
@@ -174,6 +187,14 @@ class Changelog extends Model
     public function scopeByBatch($query, $batchNumber)
     {
         return $query->where('batch_number', $batchNumber);
+    }
+
+    /**
+     * Filter by transaction ID
+     */
+    public function scopeByTransaction($query, $transactionId)
+    {
+        return $query->where('transaction_id', $transactionId);
     }
 
     /**
@@ -229,7 +250,7 @@ class Changelog extends Model
     }
 
     /**
-     * Search in description, user_name, or batch_number
+     * Search in description, user_name, batch_number, or transaction_id
      */
     public function scopeSearch($query, $searchTerm)
     {
@@ -237,7 +258,8 @@ class Changelog extends Model
             $q->where('description', 'ILIKE', "%{$searchTerm}%")
               ->orWhere('user_name', 'ILIKE', "%{$searchTerm}%")
               ->orWhere('user_nik', 'ILIKE', "%{$searchTerm}%")
-              ->orWhere('batch_number', 'ILIKE', "%{$searchTerm}%");
+              ->orWhere('batch_number', 'ILIKE', "%{$searchTerm}%")
+              ->orWhere('transaction_id', 'ILIKE', "%{$searchTerm}%");  // ADDED
         });
     }
 
