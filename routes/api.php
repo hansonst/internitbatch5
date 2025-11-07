@@ -7,6 +7,7 @@ use App\Http\Controllers\LoginController;
 use App\Http\Controllers\DataTimbanganController;
 use App\Http\Controllers\ProductionReportController;
 use App\Http\Controllers\ChangelogsController;
+use App\Http\Controllers\SapGrController;
 
 // Health check route
 Route::get('health', function () {
@@ -150,4 +151,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/summary', [ProductionReportController::class, 'getProductionReportSummary']);
         Route::get('/filter-options', [ProductionReportController::class, 'getProductionReportFilterOptions']);
     });
+    // ============= SAP INTEGRATION ROUTES =============
+   Route::prefix('sap')->group(function () {
+       Route::get('/po/{poNo}', [SapGrController::class, 'getPurchaseOrder']);
+       Route::get('/po', [SapGrController::class, 'getPurchaseOrderList']);
+       Route::post('/gr', [SapGrController::class, 'createGoodReceipt']);
+   });
 });
