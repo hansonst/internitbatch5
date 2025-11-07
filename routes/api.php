@@ -8,6 +8,7 @@ use App\Http\Controllers\DataTimbanganController;
 use App\Http\Controllers\ProductionReportController;
 use App\Http\Controllers\ChangelogsController;
 use App\Http\Controllers\SapGrController;
+use App\Http\Controllers\SapLoginController;
 
 // Health check route
 Route::get('health', function () {
@@ -23,7 +24,7 @@ Route::post('/check-active-shift-with-perbox', [DataTimbanganController::class, 
 Route::get('/data-timbangan-perbox/{data_timbangan_id}', [DataTimbanganController::class, 'getWeightEntries']);
 Route::get('/pro-orders', [ProductionOrderController::class, 'getProOrders']);
 
-// Authentication routes (public)
+// ============= PRODUCTION ORDER AUTHENTICATION (PUBLIC) =============
 Route::post('/login', [LoginController::class, 'login'])->name('login');
 Route::get('/login', function () {
     return response()->json([
@@ -37,7 +38,26 @@ Route::get('/login', function () {
     ]);
 });
 
-// Protected routes (require authentication)
+// ============= SAP AUTHENTICATION (PUBLIC) =============
+Route::prefix('sap')->group(function () {
+    Route::post('/login', [SapLoginController::class, 'login'])->name('sap.login');
+    Route::get('/login', function () {
+        return response()->json([
+            'message' => 'SAP Login endpoint is working. Use POST method to login.',
+            'required_fields' => ['user_id', 'password'],
+            'example' => [
+                'method' => 'POST',
+                'url' => url('/api/sap/login'),
+                'body' => [
+                    'user_id' => 'OJSAIT001',
+                    'password' => 'your_password'
+                ]
+            ]
+        ]);
+    });
+});
+
+// ============= PRODUCTION ORDER PROTECTED ROUTES (auth:sanctum) =============
 Route::middleware('auth:sanctum')->group(function () {
     
     // ============= AUTHENTICATION ROUTES =============
@@ -151,10 +171,22 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/summary', [ProductionReportController::class, 'getProductionReportSummary']);
         Route::get('/filter-options', [ProductionReportController::class, 'getProductionReportFilterOptions']);
     });
-    // ============= SAP INTEGRATION ROUTES =============
-   Route::prefix('sap')->group(function () {
-       Route::get('/po/{poNo}', [SapGrController::class, 'getPurchaseOrder']);
-       Route::get('/po', [SapGrController::class, 'getPurchaseOrderList']);
-       Route::post('/gr', [SapGrController::class, 'createGoodReceipt']);
-   });
+});
+
+// ============= SAP PROTECTED ROUTES (auth:sap) =============
+Route::middleware('auth:sap')->prefix('sap')->group(function () {
+    
+    // SAP Authentication Routes
+    Route::post('/logout', [SapLoginController::class, 'logout']);
+    Route::post('/logout-all', [SapLoginController::class, 'logoutAll']);
+    Route::get('/profile', [SapLoginController::class, 'profile']);
+    Route::get('/check-auth', [SapLoginController::class, 'checkAuth']);
+    Route::get('/user', function (Request $request) {
+        return $request->user();
+    });
+    
+    // SAP Purchase Order & Good Receipt Routes
+    Route::get('/po/{poNo}', [SapGrController::class, 'getPurchaseOrder']);
+    Route::get('/po', [SapGrController::class, 'getPurchaseOrderList']);
+    Route::post('/gr', [SapGrController::class, 'createGoodReceipt']);
 });

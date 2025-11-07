@@ -31,7 +31,7 @@ return [
     | users are actually retrieved out of your database or other storage
     | system used by the application. Typically, Eloquent is utilized.
     |
-    | Supported: "session"
+    | Supported: "session", "token"
     |
     */
 
@@ -39,6 +39,18 @@ return [
         'web' => [
             'driver' => 'session',
             'provider' => 'users',
+        ],
+
+        // Sanctum guard for Production Order users (default database)
+        'sanctum' => [
+            'driver' => 'sanctum',
+            'provider' => 'users',
+        ],
+
+        // Sanctum guard for SAP users (gr_po_it database)
+        'sap' => [
+            'driver' => 'sanctum',
+            'provider' => 'users_sap',
         ],
     ],
 
@@ -60,9 +72,16 @@ return [
     */
 
     'providers' => [
+        // Provider for Production Order users
         'users' => [
             'driver' => 'eloquent',
             'model' => env('AUTH_MODEL', App\Models\User::class),
+        ],
+
+        // Provider for SAP users (gr_po_it database)
+        'users_sap' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\UserSap::class,
         ],
 
         // 'users' => [
@@ -94,6 +113,14 @@ return [
         'users' => [
             'provider' => 'users',
             'table' => env('AUTH_PASSWORD_RESET_TOKEN_TABLE', 'password_reset_tokens'),
+            'expire' => 60,
+            'throttle' => 60,
+        ],
+
+        // Password reset config for SAP users (optional)
+        'users_sap' => [
+            'provider' => 'users_sap',
+            'table' => 'password_reset_tokens', // You may need to create this table in gr_po_it database
             'expire' => 60,
             'throttle' => 60,
         ],
