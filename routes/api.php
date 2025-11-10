@@ -179,19 +179,18 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 // ============= SAP PROTECTED ROUTES (auth:sap) =============
-Route::middleware('auth:sap')->prefix('sap')->group(function () {
-    
-    // SAP Authentication Routes
+Route::middleware(['auth:sap', 'log.sap.auth'])->prefix('sap')->group(function () {
+    Route::get('/po/{poNo}', [SapGrController::class, 'getPurchaseOrder']);
+    Route::get('/po', [SapGrController::class, 'getPurchaseOrderList']);
+    Route::post('/gr', [SapGrController::class, 'createGoodReceipt']);
+});
     Route::post('/logout', [SapLoginController::class, 'logout']);
     Route::post('/logout-all', [SapLoginController::class, 'logoutAll']);
     Route::get('/profile', [SapLoginController::class, 'profile']);
     Route::get('/check-auth', [SapLoginController::class, 'checkAuth']);
     Route::get('/user', function (Request $request) {
         return $request->user();
-    });
-    
-    // SAP Purchase Order & Good Receipt Routes
-    Route::get('/po/{poNo}', [SapGrController::class, 'getPurchaseOrder']);
-    Route::get('/po', [SapGrController::class, 'getPurchaseOrderList']);
-    Route::post('/gr', [SapGrController::class, 'createGoodReceipt']);
 });
+    
+   
+    

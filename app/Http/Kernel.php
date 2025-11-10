@@ -16,6 +16,7 @@ class Kernel extends HttpKernel
         \Illuminate\Foundation\Http\Middleware\ValidatePostSize::class,
         \App\Http\Middleware\TrimStrings::class,
         \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
+        'log.sap.auth' => \App\Http\Middleware\LogSapAuth::class
         // Remove custom CorsMiddleware
     ];
 
