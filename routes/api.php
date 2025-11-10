@@ -19,6 +19,11 @@ Route::get('health', function () {
     ]);
 });
 
+Route::prefix('sap')->group(function () {
+    // Login route - must be public
+    Route::post('/login', [SapLoginController::class, 'login']);
+});
+
 // Public routes (no authentication required)
 Route::post('/check-active-shift-with-perbox', [DataTimbanganController::class, 'checkActiveShiftWithPerbox']);
 Route::get('/data-timbangan-perbox/{data_timbangan_id}', [DataTimbanganController::class, 'getWeightEntries']);
@@ -171,11 +176,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/summary', [ProductionReportController::class, 'getProductionReportSummary']);
         Route::get('/filter-options', [ProductionReportController::class, 'getProductionReportFilterOptions']);
     });
-});
-
-Route::prefix('sap')->group(function () {
-    // Login route - must be public
-    Route::post('/login', [SapLoginController::class, 'login']);
 });
 
 // ============= SAP PROTECTED ROUTES (auth:sap) =============
