@@ -19,11 +19,6 @@ Route::get('health', function () {
     ]);
 });
 
-Route::prefix('sap')->group(function () {
-    // Login route - must be public
-    Route::post('/login', [SapLoginController::class, 'login']);
-});
-
 // Public routes (no authentication required)
 Route::post('/check-active-shift-with-perbox', [DataTimbanganController::class, 'checkActiveShiftWithPerbox']);
 Route::get('/data-timbangan-perbox/{data_timbangan_id}', [DataTimbanganController::class, 'getWeightEntries']);
@@ -180,17 +175,18 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // ============= SAP PROTECTED ROUTES (auth:sap) =============
 Route::middleware(['auth:sap', 'log.sap.auth'])->prefix('sap')->group(function () {
-    Route::get('/po/{poNo}', [SapGrController::class, 'getPurchaseOrder']);
-    Route::get('/po', [SapGrController::class, 'getPurchaseOrderList']);
-    Route::post('/gr', [SapGrController::class, 'createGoodReceipt']);
-});
+    
+    // SAP Authentication Routes
     Route::post('/logout', [SapLoginController::class, 'logout']);
     Route::post('/logout-all', [SapLoginController::class, 'logoutAll']);
     Route::get('/profile', [SapLoginController::class, 'profile']);
     Route::get('/check-auth', [SapLoginController::class, 'checkAuth']);
     Route::get('/user', function (Request $request) {
         return $request->user();
+    });
+    
+    // SAP Purchase Order & Good Receipt Routes
+    Route::get('/po/{poNo}', [SapGrController::class, 'getPurchaseOrder']);
+    Route::get('/po', [SapGrController::class, 'getPurchaseOrderList']);
+    Route::post('/gr', [SapGrController::class, 'createGoodReceipt']);
 });
-    
-   
-    
