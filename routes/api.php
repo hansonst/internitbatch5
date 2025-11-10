@@ -173,6 +173,11 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 });
 
+Route::prefix('sap')->group(function () {
+    // Login route - must be public
+    Route::post('/login', [SapLoginController::class, 'login']);
+});
+
 // ============= SAP PROTECTED ROUTES (auth:sap) =============
 Route::middleware('auth:sap')->prefix('sap')->group(function () {
     
