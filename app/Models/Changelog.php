@@ -18,7 +18,7 @@ class Changelog extends Model
         'user_nik',
         'user_role',
         'batch_number',
-        'transaction_id',  // ADDED: transaction_id field
+        'transaction_id',  
         'additional_data',
         'timestamp',
     ];
