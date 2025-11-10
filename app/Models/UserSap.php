@@ -16,7 +16,7 @@ class UserSap extends Authenticatable
      *
      * @var string
      */
-    protected $connection = 'gr_po_it';
+    protected $connection = 'pgsql_second';
 
     /**
      * The table associated with the model.
