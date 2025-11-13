@@ -11,53 +11,13 @@ class UserSap extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
 
-    /**
-     * The connection name for the model.
-     *
-     * @var string
-     */
     protected $connection = 'pgsql_second';
-
-    /**
-     * The table associated with the model.
-     *
-     * @var string
-     */
     protected $table = 'users';
-
-    /**
-     * The primary key associated with the table.
-     *
-     * @var string
-     */
     protected $primaryKey = 'user_id';
-
-    /**
-     * The "type" of the primary key ID.
-     *
-     * @var string
-     */
     protected $keyType = 'string';
-
-    /**
-     * Indicates if the IDs are auto-incrementing.
-     *
-     * @var bool
-     */
     public $incrementing = false;
-
-    /**
-     * Indicates if the model should be timestamped.
-     *
-     * @var bool
-     */
     public $timestamps = false;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
     protected $fillable = [
         'user_id',
         'first_name',
@@ -70,28 +30,16 @@ class UserSap extends Authenticatable
         'status',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var array<int, string>
-     */
     protected $hidden = [
         'password',
     ];
 
-    /**
-     * The attributes that should be cast.
-     *
-     * @var array<string, string>
-     */
     protected $casts = [
         'status' => 'string',
     ];
 
     /**
      * Check if user is active
-     *
-     * @return bool
      */
     public function isActive()
     {
@@ -99,9 +47,7 @@ class UserSap extends Authenticatable
     }
 
     /**
-     * Get the user's full name.
-     *
-     * @return string
+     * Get full name attribute
      */
     public function getFullNameAttribute()
     {
@@ -109,10 +55,7 @@ class UserSap extends Authenticatable
     }
 
     /**
-     * Scope a query to only include active users.
-     *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
-     * @return \Illuminate\Database\Eloquent\Builder
+     * Scope to get only active users
      */
     public function scopeActive($query)
     {
@@ -120,11 +63,7 @@ class UserSap extends Authenticatable
     }
 
     /**
-     * Scope a query to filter by department.
-     *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
-     * @param  string  $department
-     * @return \Illuminate\Database\Eloquent\Builder
+     * Scope to get users by department
      */
     public function scopeByDepartment($query, $department)
     {

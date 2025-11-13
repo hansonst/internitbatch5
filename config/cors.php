@@ -7,7 +7,11 @@ return [
     |--------------------------------------------------------------------------
     */
 
-    'paths' => ['api/*', 'sanctum/csrf-cookie'],
+    'paths' => [
+        'api/*', 
+        'sanctum/csrf-cookie',
+        'sap/*',  // Add this to cover your /sap/login endpoint
+    ],
 
     'allowed_methods' => ['*'],
 
@@ -21,5 +25,5 @@ return [
 
     'max_age' => 0,
 
-    'supports_credentials' => false,
+    'supports_credentials' => true,  // Change this to true if you're using cookies/sessions
 ];

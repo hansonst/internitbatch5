@@ -15,6 +15,7 @@ class User extends Authenticatable
     protected $primaryKey = 'nik';
     public $incrementing = false; // Since nik is not auto-incrementing
     protected $keyType = 'string';
+    
 
     protected $fillable = [
         'nik',
