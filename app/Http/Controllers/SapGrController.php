@@ -112,7 +112,7 @@ class SapGrController extends Controller
     ]);
 
     try {
-        $url = "{$this->baseUrl}/sap/opu/odata4/sap/zmm_oji_po_bind/srvd/sap/zmm_oji_po/0001/ZPO_DTL_LIST(po_no='{$poNo}')/Set";
+        $url = "{$this->baseUrl}/sap/opu/odata4/sap/zmm_oji_po_bind/srvd/sap/zmm_oji_po/0001/ZPOA_DTL_LIST(po_no='{$poNo}')/Set";
 
         Log::info('Making request to SAP', [
             'url' => $url,
