@@ -26,17 +26,6 @@ Route::get('/pro-orders', [ProductionOrderController::class, 'getProOrders']);
 
 // ============= PRODUCTION ORDER AUTHENTICATION (PUBLIC) =============
 Route::post('/login', [LoginController::class, 'login'])->name('login');
-Route::get('/login', function () {
-    return response()->json([
-        'message' => 'Login endpoint is working. Use POST method to login.',
-        'required_fields' => ['nik'],
-        'example' => [
-            'method' => 'POST',
-            'url' => url('/api/login'),
-            'body' => ['nik' => 'your_nik_here']
-        ]
-    ]);
-});
 
 Route::prefix('sap')->group(function () {
     // Public Authentication route
