@@ -56,10 +56,6 @@ class LoginController extends Controller
 
         Log::info('User found, creating token');
         
-        // ✅ REMOVED: Auth::login($user); - Not needed for Sanctum!
-
-        // Create token for API authentication
-        $token = $user->createToken('auth_token')->plainTextToken;
         
         Log::info('Token created successfully');
 
@@ -79,7 +75,6 @@ class LoginController extends Controller
                     'inisial' => $user->inisial ?? null,
                     'group' => $user->group ?? null,
                 ],
-                'token' => $token
             ]
         ], 200);
 
