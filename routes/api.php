@@ -10,6 +10,7 @@ use App\Http\Controllers\ChangelogsController;
 use App\Http\Controllers\SapGrController;
 use App\Http\Controllers\SapLoginController;
 
+
 // Health check route
 Route::get('health', function () {
     return response()->json([
@@ -32,7 +33,7 @@ Route::prefix('sap')->group(function () {
     Route::post('/login', [SapLoginController::class, 'login']);
     
     // Protected routes - require authentication
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware('auth:sanctum_sap')->group(function () {
         // Auth management
         Route::post('/logout', [SapLoginController::class, 'logout']);
         Route::post('/logout-all', [SapLoginController::class, 'logoutAll']);

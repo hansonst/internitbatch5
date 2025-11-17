@@ -25,7 +25,12 @@ return [
     
     'sanctum' => [
         'driver' => 'sanctum',
-        'provider' => 'users_sap', // Default for API authentication
+        'provider' => 'users', // ✅ Production Order
+    ],
+    
+    'sanctum_sap' => [
+        'driver' => 'sanctum',
+        'provider' => 'users_sap', // ✅ SAP
     ],
 ],
 

@@ -55,10 +55,13 @@ class LoginController extends Controller
         }
 
         Log::info('User found, creating token');
-        
+
+        // ✅ Create token for API authentication
+        $token = $user->createToken('auth_token')->plainTextToken;
         
         Log::info('Token created successfully');
 
+        // ✅ Return response with token included
         return response()->json([
             'success' => true,
             'message' => 'Login successful',
@@ -75,6 +78,7 @@ class LoginController extends Controller
                     'inisial' => $user->inisial ?? null,
                     'group' => $user->group ?? null,
                 ],
+                'token' => $token  // ✅ Token is included here
             ]
         ], 200);
 
