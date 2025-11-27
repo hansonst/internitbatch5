@@ -45,6 +45,13 @@ Route::prefix('sap')->group(function () {
         
         // Good Receipt routes
         Route::post('/good-receipts', [SapGrController::class, 'createGoodReceipt']);
+         Route::get('/gr-history', [SapGrController::class, 'getGrHistory']);
+    
+    // Optional: Get history for specific item only
+    Route::get('/gr-history-by-item', [SapGrController::class, 'getGrHistoryByItem']);
+    
+    // Optional: Get unique dropdown values only (lighter response)
+    Route::get('/gr-dropdown-values', [SapGrController::class, 'getGrDropdownValues']);
     });
 });
 

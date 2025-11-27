@@ -73,7 +73,10 @@ class SapGrController extends Controller
             'get_gr_summary' => 'view',
             'get_po_list' => 'view',
             'cancel_gr' => 'delete',
-            'update_gr' => 'update'
+            'update_gr' => 'update',
+            'get_gr_history' => 'view', // NEW
+            'get_gr_history_by_item' => 'view', // NEW
+            'get_gr_dropdown_values' => 'view' // NEW
         ];
 
         return $actions[$activityType] ?? 'unknown';
@@ -86,7 +89,7 @@ class SapGrController extends Controller
     /**
      * Get Purchase Order details - requires PO number input
      * 
-     * @param Request $request
+     * @param Request $request  
      * @return \Illuminate\Http\JsonResponse
      */
     public function getPurchaseOrder(Request $request)
@@ -341,6 +344,245 @@ $this->logSapActivity('create_gr', $request, false, null, $response->status(), $
             return response()->json([
                 'success' => false,
                 'message' => 'Error creating Good Receipt',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+        
+    }
+    public function getGrHistory(Request $request)
+    {
+        $validated = $request->validate([
+            'po_no' => 'required|string'
+        ]);
+
+        $poNo = $validated['po_no'];
+        $user = $request->user();
+        $startTime = microtime(true);
+
+        Log::info('=== GET GR HISTORY START ===', [
+            'po_no' => $poNo,
+            'requested_by' => $user ? ($user->email ?? $user->user_id ?? 'N/A') : 'PUBLIC'
+        ]);
+
+        try {
+            // Fetch all successful GR records for this PO
+            $grRecords = GoodReceipt::where('po_no', $poNo)
+                ->where('success', true) // Only successful GRs
+                ->whereNotNull('material_doc_no') // Must have SAP material document
+                ->orderBy('date_gr', 'desc')
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            Log::info('GR records fetched', [
+                'po_no' => $poNo,
+                'total_records' => $grRecords->count()
+            ]);
+
+            // Group by item_po to match frontend structure
+            $grHistory = [];
+            
+            foreach ($grRecords as $record) {
+                $itemNo = $record->item_po;
+                
+                if (!isset($grHistory[$itemNo])) {
+                    $grHistory[$itemNo] = [];
+                }
+                
+                // Add to history array for this item
+                $grHistory[$itemNo][] = [
+                    'date_gr' => $record->date_gr,
+                    'qty' => $record->qty,
+                    'dn_no' => $record->dn_no,
+                    'sloc' => $record->sloc,
+                    'batch_no' => $record->batch_no ?? '', // Can be null
+                    'mat_doc' => $record->material_doc_no,
+                    'doc_year' => $record->doc_year,
+                    'plant' => $record->plant,
+                    'created_at' => $record->created_at->format('Y-m-d H:i:s'),
+                    'created_by' => $record->user_email ?? 'Unknown',
+                    'department' => $record->department
+                ];
+            }
+
+            $responseTime = round((microtime(true) - $startTime) * 1000);
+
+            Log::info('=== GET GR HISTORY END (SUCCESS) ===', [
+                'po_no' => $poNo,
+                'items_with_history' => count($grHistory),
+                'total_gr_records' => $grRecords->count(),
+                'response_time_ms' => $responseTime
+            ]);
+
+            // Log activity
+            $this->logSapActivity(
+                'get_gr_history', 
+                $request, 
+                true, 
+                ['items_count' => count($grHistory), 'total_records' => $grRecords->count()],
+                200,
+                null,
+                $responseTime,
+                'Database query - good_receipts table'
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'GR history retrieved successfully',
+                'data' => $grHistory,
+                'meta' => [
+                    'po_no' => $poNo,
+                    'items_with_history' => count($grHistory),
+                    'total_records' => $grRecords->count()
+                ]
+            ]);
+
+        } catch (Exception $e) {
+            $responseTime = round((microtime(true) - $startTime) * 1000);
+            
+            $this->logSapActivity(
+                'get_gr_history',
+                $request,
+                false,
+                null,
+                500,
+                $e->getMessage(),
+                $responseTime,
+                'Database query - good_receipts table'
+            );
+
+            Log::error('Exception in getGrHistory', [
+                'po_no' => $poNo,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching GR history',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    public function getGrHistoryByItem(Request $request)
+    {
+        $validated = $request->validate([
+            'po_no' => 'required|string',
+            'item_po' => 'required|string'
+        ]);
+
+        $poNo = $validated['po_no'];
+        $itemPo = $validated['item_po'];
+        $user = $request->user();
+
+        Log::info('=== GET GR HISTORY BY ITEM START ===', [
+            'po_no' => $poNo,
+            'item_po' => $itemPo,
+            'requested_by' => $user ? ($user->email ?? $user->user_id ?? 'N/A') : 'PUBLIC'
+        ]);
+
+        try {
+            $grRecords = GoodReceipt::where('po_no', $poNo)
+                ->where('item_po', $itemPo)
+                ->where('success', true)
+                ->whereNotNull('material_doc_no')
+                ->orderBy('date_gr', 'desc')
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->map(function ($record) {
+                    return [
+                        'date_gr' => $record->date_gr,
+                        'qty' => $record->qty,
+                        'dn_no' => $record->dn_no,
+                        'sloc' => $record->sloc,
+                        'batch_no' => $record->batch_no ?? '',
+                        'mat_doc' => $record->material_doc_no,
+                        'doc_year' => $record->doc_year,
+                        'plant' => $record->plant,
+                        'created_at' => $record->created_at->format('Y-m-d H:i:s'),
+                        'created_by' => $record->user_email ?? 'Unknown',
+                        'department' => $record->department
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'GR history retrieved successfully',
+                'data' => $grRecords,
+                'meta' => [
+                    'po_no' => $poNo,
+                    'item_po' => $itemPo,
+                    'total_records' => $grRecords->count()
+                ]
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Exception in getGrHistoryByItem', [
+                'po_no' => $poNo,
+                'item_po' => $itemPo,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching GR history',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    public function getGrDropdownValues(Request $request)
+    {
+        $validated = $request->validate([
+            'po_no' => 'required|string',
+            'item_po' => 'nullable|string' // Optional: filter by specific item
+        ]);
+
+        $poNo = $validated['po_no'];
+        $itemPo = $validated['item_po'] ?? null;
+
+        try {
+            $query = GoodReceipt::where('po_no', $poNo)
+                ->where('success', true)
+                ->whereNotNull('material_doc_no');
+
+            if ($itemPo) {
+                $query->where('item_po', $itemPo);
+            }
+
+            $records = $query->get();
+
+            // Get unique values for dropdowns
+            $dnNos = $records->pluck('dn_no')->unique()->filter()->sort()->values();
+            $dateGrs = $records->pluck('date_gr')->unique()->filter()->sort()->values();
+            $batchNos = $records->pluck('batch_no')->unique()->filter()->reject(function($value) {
+                return empty($value);
+            })->sort()->values();
+            $slocs = $records->pluck('sloc')->unique()->filter()->sort()->values();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Dropdown values retrieved successfully',
+                'data' => [
+                    'dn_no' => $dnNos,
+                    'date_gr' => $dateGrs,
+                    'batch_no' => $batchNos,
+                    'sloc' => $slocs
+                ],
+                'meta' => [
+                    'po_no' => $poNo,
+                    'item_po' => $itemPo,
+                    'total_records' => $records->count()
+                ]
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Exception in getGrDropdownValues', [
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching dropdown values',
                 'error' => $e->getMessage()
             ], 500);
         }
