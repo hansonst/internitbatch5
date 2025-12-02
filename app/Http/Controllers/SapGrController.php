@@ -81,9 +81,9 @@ class SapGrController extends Controller
 
         return $actions[$activityType] ?? 'unknown';
     }
-    private $baseUrl = 'https://192.104.210.16:44320';
+    private $baseUrl = 'https://193.104.210.16:44320';
     private $username = 'OJTECHIT01';
-    private $password = '@DragonForce.7'; 
+    private $password = '@DragonForce.8'; 
     private $sapClient = '210';
 
     /**
@@ -207,16 +207,20 @@ class SapGrController extends Controller
     public function createGoodReceipt(Request $request)
     {
         // Validate input - all required fields including sloc
-        $validated = $request->validate([
-            'dn_no' => 'required|string',
-            'date_gr' => 'required|date_format:Y-m-d',
-            'po_no' => 'required|string',
-            'item_po' => 'required|string',
-            'qty' => 'required|string', 
-            'plant' => 'required|string',
-            'sloc' => 'required|string',
-            'batch_no' => 'nullable|string'
-        ]);
+       $validated = $request->validate([
+    'dn_no' => 'nullable|string',        
+    'date_gr' => 'nullable|date_format:Y-m-d', 
+    'po_no' => 'required|string',
+    'item_po' => 'required|string',      
+    'qty' => 'required|string',          
+    'plant' => 'required|string',
+    'sloc' => 'nullable|string',         
+    'batch_no' => 'nullable|string'
+]);
+
+if (empty($validated['date_gr'])) {
+    $validated['date_gr'] = now()->timezone('Asia/Jakarta')->format('Y-m-d');
+}
 
         // Get authenticated user
         $user = $request->user();
@@ -261,7 +265,7 @@ class SapGrController extends Controller
                 'it_input' => [
                     [
                         'po_no' => $validated['po_no'],
-                        'item_po' => $validated['item_po'],
+                        'item_po' => str_pad($validated['item_po'], 5, '0', STR_PAD_LEFT),
                         'qty' => $validated['qty'],
                         'plant' => $validated['plant'],
                         'sloc' => $validated['sloc'],
