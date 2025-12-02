@@ -81,9 +81,9 @@ class SapGrController extends Controller
 
         return $actions[$activityType] ?? 'unknown';
     }
-    private $baseUrl = 'https://193.104.210.16:44320';
+    private $baseUrl = 'https://192.104.210.16:44320';
     private $username = 'OJTECHIT01';
-    private $password = '@DragonForce.8'; 
+    private $password = '@DragonForce.7'; 
     private $sapClient = '210';
 
     /**
