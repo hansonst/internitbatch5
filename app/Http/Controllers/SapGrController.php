@@ -259,20 +259,28 @@ if (empty($validated['date_gr'])) {
                 'created_by' => $user ? ($user->email ?? $user->user_id ?? 'N/A') : 'PUBLIC'
             ]);
 
-            $payload = [
-                'dn_no' => $validated['dn_no'],
-                'date_gr' => $validated['date_gr'],
-                'it_input' => [
-                    [
-                        'po_no' => $validated['po_no'],
-                        'item_po' => str_pad($validated['item_po'], 5, '0', STR_PAD_LEFT),
-                        'qty' => $validated['qty'],
-                        'plant' => $validated['plant'],
-                        'sloc' => $validated['sloc'],
-                        'batch_no' => $validated['batch_no'] ?? ''
-                    ]
-                ]
-            ];
+            $itInputItem = [
+    'po_no' => $validated['po_no'],
+    'item_po' => str_pad($validated['item_po'], 5, '0', STR_PAD_LEFT),
+    'qty' => $validated['qty'],
+    'plant' => $validated['plant'],
+];
+
+// Only add sloc if it has a value
+if (!empty($validated['sloc'])) {
+    $itInputItem['sloc'] = $validated['sloc'];
+}
+
+// Only add batch_no if it has a value
+if (!empty($validated['batch_no'])) {
+    $itInputItem['batch_no'] = $validated['batch_no'];
+}
+
+$payload = [
+    'dn_no' => $validated['dn_no'],
+    'date_gr' => $validated['date_gr'],
+    'it_input' => [$itInputItem]
+];
 
             Log::info('GR Payload', ['payload' => $payload]);
 
