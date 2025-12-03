@@ -202,279 +202,221 @@ class SapGrController extends Controller
      * Create Good Receipt Entry - Fixed to match SAP API requirements
      * 
      * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function createGoodReceipt(Request $request)
-    {
-        // Validate input - all required fields including sloc
-       $validated = $request->validate([
-    'dn_no' => 'nullable|string',        
-    'date_gr' => 'nullable|date_format:Y-m-d', 
-    'po_no' => 'required|string',
-    'item_po' => 'required|string',      
-    'qty' => 'required|string',          
-    'plant' => 'required|string',
-    'sloc' => 'nullable|string',         
-    'batch_no' => 'nullable|string'
-]);
+ * @return \Illuminate\Http\JsonResponse
+ */
+public function createGoodReceipt(Request $request)
+{
+    // Validate input - support both single item and batch items
+    $validated = $request->validate([
+        'dn_no' => 'required|string',  
+        'doc_date' => 'required|date_format:Y-m-d', 
+        'post_date' => 'required|date_format:Y-m-d',
+        
+        // ✅ Only validate items array structure
+        'items' => 'required|array|min:1',
+        'items.*.po_no' => 'required|string',
+        'items.*.item_po' => 'required|string',
+        'items.*.qty' => 'required|numeric|min:0.01',  
+        'items.*.plant' => 'required|string',
+        'items.*.sloc' => 'nullable|string',
+        'items.*.batch_no' => 'nullable|string',
+        'items.*.dom' => 'nullable|string'
+    ]);
 
-if (empty($validated['date_gr'])) {
-    $validated['date_gr'] = now()->timezone('Asia/Jakarta')->format('Y-m-d');
-}
+    // Get authenticated user
+    $user = $request->user();
+    $startTime = microtime(true);
 
-        // Get authenticated user
-        $user = $request->user();
-        $startTime = microtime(true);
+    Log::info('=== CREATE GOOD RECEIPT START ===', [
+        'auth_user' => $user ? ($user->user_id ?? $user->id) : 'PUBLIC',
+        'user_email' => $user ? ($user->email ?? 'N/A') : 'PUBLIC',
+        'items_count' => count($validated['items']),
+        'request_data' => $validated
+    ]);
 
-        $goodReceipt = GoodReceipt::create([
-    'dn_no' => $validated['dn_no'],
-    'date_gr' => $validated['date_gr'],
-    'po_no' => $validated['po_no'],
-    'item_po' => $validated['item_po'],
-    'qty' => $validated['qty'],
-    'plant' => $validated['plant'],
-    'sloc' => $validated['sloc'],
-    'batch_no' => $validated['batch_no'] ?? null,
-    'success' => false,
-    'error_message' => 'Processing...', // Temporary message
-    'user_id' => $user ? $user->user_id : null,
-    'users_table_id' => $user ? $user->id : null,
-    'user_email' => $user ? $user->email : null,
-    'department' => $user ? $user->department : null,
-    'sap_request' => $validated,
-    'sap_endpoint' => "{$this->baseUrl}/zapi/ZAPI/OJI_GR_ENTRY?sap-client={$this->sapClient}"
-]);
+    try {
+        $url = "{$this->baseUrl}/zapi/ZAPI/OJI_GR_ENTRY?sap-client={$this->sapClient}";
 
-        Log::info('=== CREATE GOOD RECEIPT START ===', [
-            'auth_user' => $user ? ($user->user_id ?? $user->id) : 'PUBLIC',
-            'user_email' => $user ? ($user->email ?? 'N/A') : 'PUBLIC',
-            'request_data' => $validated
+        // Build it_input array for SAP API
+        $itInputArray = [];
+        $goodReceiptRecords = []; // Track DB records
+
+        foreach ($validated['items'] as $item) {
+            // Prepare SAP payload item
+            $itInputArray[] = [
+                'po_no' => $item['po_no'],
+                'item_po' => str_pad($item['item_po'], 5, '0', STR_PAD_LEFT),
+                'qty' => $item['qty'],
+                'plant' => $item['plant'],
+                'sloc' => $item['sloc'] ?? '',
+                'batch_no' => $item['batch_no'] ?? '',
+                'dom' => !empty($item['dom']) ? $item['dom'] : $validated['doc_date']
+            ];
+
+            // Create DB record for tracking (initially pending)
+            $goodReceiptRecords[] = GoodReceipt::create([
+                'dn_no' => $validated['dn_no'],
+                'date_gr' => $validated['post_date'],
+                'doc_date' => $validated['doc_date'],
+                'po_no' => $item['po_no'],
+                'item_po' => $item['item_po'],
+                'qty' => $item['qty'],
+                'plant' => $item['plant'],
+                'sloc' => $item['sloc'] ?? null,
+                'batch_no' => $item['batch_no'] ?? null,
+                'dom' => $item['dom'] ?? null,
+                'success' => false,
+                'error_message' => 'Processing...',
+                'user_id' => $user ? $user->user_id : null,
+                'users_table_id' => $user ? $user->id : null,
+                'user_email' => $user ? $user->email : null,
+                'department' => $user ? $user->department : null,
+                'sap_request' => $item,
+                'sap_endpoint' => $url
+            ]);
+        }
+
+        // Build final payload
+        $payload = [
+            'dn_no' => $validated['dn_no'] ?? '',
+            'doc_date' => $validated['doc_date'],
+            'post_date' => $validated['post_date'],
+            'it_input' => $itInputArray
+        ];
+
+        Log::info('GR Payload (Batch)', [
+            'items_count' => count($itInputArray),
+            'payload' => $payload
         ]);
 
-        try {
-            $url = "{$this->baseUrl}/zapi/ZAPI/OJI_GR_ENTRY?sap-client={$this->sapClient}";
+        // Send to SAP
+        $response = Http::withBasicAuth($this->username, $this->password)
+            ->withHeaders([
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json'
+            ])
+            ->withOptions(['verify' => false])
+            ->post($url, $payload);
 
-            Log::info('Creating GR directly (no CSRF token needed)', [
-                'url' => $url,
-                'created_by' => $user ? ($user->email ?? $user->user_id ?? 'N/A') : 'PUBLIC'
-            ]);
+        Log::info('SAP GR Response received', [
+            'status' => $response->status(),
+            'successful' => $response->successful(),
+            'response_body' => $response->body()
+        ]);
 
-            $itInputItem = [
-    'po_no' => $validated['po_no'],
-    'item_po' => str_pad($validated['item_po'], 5, '0', STR_PAD_LEFT),
-    'qty' => $validated['qty'],
-    'plant' => $validated['plant'],
-];
+        if ($response->successful()) {
+            $responseTime = round((microtime(true) - $startTime) * 1000);
+            $sapData = $response->json();
 
-// Only add sloc if it has a value
-if (!empty($validated['sloc'])) {
-    $itInputItem['sloc'] = $validated['sloc'];
-}
-
-// Only add batch_no if it has a value
-if (!empty($validated['batch_no'])) {
-    $itInputItem['batch_no'] = $validated['batch_no'];
-}
-
-$payload = [
-    'dn_no' => $validated['dn_no'],
-    'date_gr' => $validated['date_gr'],
-    'it_input' => [$itInputItem]
-];
-
-            Log::info('GR Payload', ['payload' => $payload]);
-
-            $response = Http::withBasicAuth($this->username, $this->password)
-                ->withHeaders([
-                    'Accept' => 'application/json',
-                    'Content-Type' => 'application/json'
-                ])
-                ->withOptions([
-                    'verify' => false
-                ])
-                ->post($url, $payload);
-
-            Log::info('SAP GR Response received', [
-                'status' => $response->status(),
-                'successful' => $response->successful(),
-                'response_body' => $response->body()
-            ]);
-
-            if ($response->successful()) {
-                $responseTime = round((microtime(true) - $startTime) * 1000);
-                $sapData = $response->json();
-    $this->logSapActivity('create_gr', $request, true, $response->json(), $response->status(), null, $responseTime, $url);
-    $goodReceipt->update([
-        'success' => true,
-        'error_message' => null,
-        'material_doc_no' => $sapData['mat_doc'] ?? $sapData['material_doc_no'] ?? null,
-        'doc_year' => $sapData['doc_year'] ?? $sapData['year'] ?? null,
-        'posting_date' => $sapData['posting_date'] ?? null,
-        'sap_response' => $sapData,
-        'response_time_ms' => $responseTime
-    ]);
-    
-                Log::info('=== CREATE GOOD RECEIPT END (SUCCESS) ===');
-                return response()->json([
+            // Update all DB records with success
+            foreach ($goodReceiptRecords as $record) {
+                $record->update([
                     'success' => true,
-                    'message' => 'Good Receipt created successfully',
-                    'data' => $response->json()
+                    'error_message' => null,
+                    'material_doc_no' => $sapData['mat_doc'] ?? $sapData['material_doc_no'] ?? null,
+                    'doc_year' => $sapData['doc_year'] ?? $sapData['year'] ?? null,
+                    'posting_date' => $sapData['posting_date'] ?? null,
+                    'sap_response' => $sapData,
+                    'response_time_ms' => $responseTime
                 ]);
             }
 
-            Log::warning('SAP GR request failed', [
-                'status' => $response->status(),
-                'body' => $response->body()
-            ]);
-            $responseTime = round((microtime(true) - $startTime) * 1000);
-            $goodReceipt->update([
-    'success' => false,
-    'error_message' => $response->body(),
-    'sap_response' => ['error' => $response->body()],
-    'response_time_ms' => $responseTime
-]);
-$this->logSapActivity('create_gr', $request, false, null, $response->status(), $response->body(), $responseTime, $url);
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create Good Receipt',
-                'error' => $response->body()
-            ], $response->status());
-
-        } catch (Exception $e) {
-            $responseTime = round((microtime(true) - $startTime) * 1000);
-            $goodReceipt->update([
-        'success' => false,
-        'error_message' => $e->getMessage(),
-        'response_time_ms' => $responseTime
-    ]);
-    $this->logSapActivity('create_gr', $request, false, null, 500, $e->getMessage(), $responseTime, $url ?? null);
-            Log::error('Exception in createGoodReceipt', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Error creating Good Receipt',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-        
-    }
-    public function getGrHistory(Request $request)
-    {
-        $validated = $request->validate([
-            'po_no' => 'required|string'
-        ]);
-
-        $poNo = $validated['po_no'];
-        $user = $request->user();
-        $startTime = microtime(true);
-
-        Log::info('=== GET GR HISTORY START ===', [
-            'po_no' => $poNo,
-            'requested_by' => $user ? ($user->email ?? $user->user_id ?? 'N/A') : 'PUBLIC'
-        ]);
-
-        try {
-            // Fetch all successful GR records for this PO
-            $grRecords = GoodReceipt::where('po_no', $poNo)
-                ->where('success', true) // Only successful GRs
-                ->whereNotNull('material_doc_no') // Must have SAP material document
-                ->orderBy('date_gr', 'desc')
-                ->orderBy('created_at', 'desc')
-                ->get();
-
-            Log::info('GR records fetched', [
-                'po_no' => $poNo,
-                'total_records' => $grRecords->count()
-            ]);
-
-            // Group by item_po to match frontend structure
-            $grHistory = [];
-            
-            foreach ($grRecords as $record) {
-                $itemNo = $record->item_po;
-                
-                if (!isset($grHistory[$itemNo])) {
-                    $grHistory[$itemNo] = [];
-                }
-                
-                // Add to history array for this item
-                $grHistory[$itemNo][] = [
-                    'date_gr' => $record->date_gr,
-                    'qty' => $record->qty,
-                    'dn_no' => $record->dn_no,
-                    'sloc' => $record->sloc,
-                    'batch_no' => $record->batch_no ?? '', // Can be null
-                    'mat_doc' => $record->material_doc_no,
-                    'doc_year' => $record->doc_year,
-                    'plant' => $record->plant,
-                    'created_at' => $record->created_at->format('Y-m-d H:i:s'),
-                    'created_by' => $record->user_email ?? 'Unknown',
-                    'department' => $record->department
-                ];
-            }
-
-            $responseTime = round((microtime(true) - $startTime) * 1000);
-
-            Log::info('=== GET GR HISTORY END (SUCCESS) ===', [
-                'po_no' => $poNo,
-                'items_with_history' => count($grHistory),
-                'total_gr_records' => $grRecords->count(),
-                'response_time_ms' => $responseTime
-            ]);
-
-            // Log activity
             $this->logSapActivity(
-                'get_gr_history', 
+                'create_gr', 
                 $request, 
                 true, 
-                ['items_count' => count($grHistory), 'total_records' => $grRecords->count()],
-                200,
-                null,
-                $responseTime,
-                'Database query - good_receipts table'
+                $sapData, 
+                $response->status(), 
+                null, 
+                $responseTime, 
+                $url
             );
+
+            Log::info('=== CREATE GOOD RECEIPT END (SUCCESS) ===', [
+                'items_processed' => count($goodReceiptRecords),
+                'material_doc_no' => $sapData['mat_doc'] ?? 'N/A'
+            ]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'GR history retrieved successfully',
-                'data' => $grHistory,
+                'message' => 'Good Receipt created successfully',
+                'data' => $sapData,
                 'meta' => [
-                    'po_no' => $poNo,
-                    'items_with_history' => count($grHistory),
-                    'total_records' => $grRecords->count()
+                    'items_processed' => count($goodReceiptRecords)
                 ]
             ]);
-
-        } catch (Exception $e) {
-            $responseTime = round((microtime(true) - $startTime) * 1000);
-            
-            $this->logSapActivity(
-                'get_gr_history',
-                $request,
-                false,
-                null,
-                500,
-                $e->getMessage(),
-                $responseTime,
-                'Database query - good_receipts table'
-            );
-
-            Log::error('Exception in getGrHistory', [
-                'po_no' => $poNo,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Error fetching GR history',
-                'error' => $e->getMessage()
-            ], 500);
         }
+
+        // Handle failure - update all records
+        Log::warning('SAP GR request failed', [
+            'status' => $response->status(),
+            'body' => $response->body()
+        ]);
+
+        $responseTime = round((microtime(true) - $startTime) * 1000);
+
+        foreach ($goodReceiptRecords as $record) {
+            $record->update([
+                'success' => false,
+                'error_message' => $response->body(),
+                'sap_response' => ['error' => $response->body()],
+                'response_time_ms' => $responseTime
+            ]);
+        }
+
+        $this->logSapActivity(
+            'create_gr', 
+            $request, 
+            false, 
+            null, 
+            $response->status(), 
+            $response->body(), 
+            $responseTime, 
+            $url
+        );
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to create Good Receipt',
+            'error' => $response->body()
+        ], $response->status());
+
+    } catch (Exception $e) {
+        $responseTime = round((microtime(true) - $startTime) * 1000);
+
+        // Update all pending records with error
+        foreach ($goodReceiptRecords as $record) {
+            $record->update([
+                'success' => false,
+                'error_message' => $e->getMessage(),
+                'response_time_ms' => $responseTime
+            ]);
+        }
+
+        $this->logSapActivity(
+            'create_gr', 
+            $request, 
+            false, 
+            null, 
+            500, 
+            $e->getMessage(), 
+            $responseTime, 
+            $url ?? null
+        );
+
+        Log::error('Exception in createGoodReceipt', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Error creating Good Receipt',
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
+
     public function getGrHistoryByItem(Request $request)
     {
         $validated = $request->validate([
