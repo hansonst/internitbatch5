@@ -81,10 +81,18 @@ class SapGrController extends Controller
 
         return $actions[$activityType] ?? 'unknown';
     }
-    private $baseUrl = 'https://192.104.210.16:44320';
-    private $username = 'OJTECHIT01';
-    private $password = '@DragonForce.7'; 
-    private $sapClient = '210';
+    private $baseUrl;
+private $username;
+private $password;
+private $sapClient;
+
+public function __construct()
+{
+    $this->baseUrl = env('SAP_BASE_URL');
+    $this->username = env('SAP_USERNAME');
+    $this->password = env('SAP_PASSWORD');
+    $this->sapClient = env('SAP_CLIENT');
+}
 
     /**
      * Get Purchase Order details - requires PO number input
