@@ -217,8 +217,8 @@ public function createGoodReceipt(Request $request)
     // Validate input - support both single item and batch items
     $validated = $request->validate([
         'dn_no' => 'required|string',  
-        'doc_date' => 'required|date_format:Y-m-d', 
-        'post_date' => 'required|date_format:Y-m-d',
+        'doc_date' => 'required|date_format:d-m-Y', 
+    'post_date' => 'required|date_format:d-m-Y',
         
         // ✅ Only validate items array structure
         'items' => 'required|array|min:1',
@@ -230,6 +230,9 @@ public function createGoodReceipt(Request $request)
         'items.*.batch_no' => 'nullable|string',
         'items.*.dom' => 'nullable|string'
     ]);
+
+    $docDate = \Carbon\Carbon::createFromFormat('d-m-Y', $validated['doc_date'])->format('Y-m-d');
+$postDate = \Carbon\Carbon::createFromFormat('d-m-Y', $validated['post_date'])->format('Y-m-d');
 
     // Get authenticated user
     $user = $request->user();
@@ -284,13 +287,12 @@ public function createGoodReceipt(Request $request)
             ]);
         }
 
-        // Build final payload
         $payload = [
-            'dn_no' => $validated['dn_no'] ?? '',
-            'doc_date' => $validated['doc_date'],
-            'post_date' => $validated['post_date'],
-            'it_input' => $itInputArray
-        ];
+    'dn_no' => $validated['dn_no'] ?? '',
+    'doc_date' => $docDate,   
+    'post_date' => $postDate, 
+    'it_input' => $itInputArray
+];
 
         Log::info('GR Payload (Batch)', [
             'items_count' => count($itInputArray),
