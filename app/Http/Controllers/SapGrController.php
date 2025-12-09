@@ -261,7 +261,7 @@ $postDate = \Carbon\Carbon::createFromFormat('d-m-Y', $validated['post_date'])->
                 'plant' => $item['plant'],
                 'sloc' => $item['sloc'] ?? '',
                 'batch_no' => $item['batch_no'] ?? '',
-                'dom' => !empty($item['dom']) ? $item['dom'] : $validated['doc_date']
+                'dom' => !empty($item['dom']) ? \Carbon\Carbon::createFromFormat('d-m-Y', $item['dom'])->format('Y-m-d') : $docDate
             ];
 
             // Create DB record for tracking (initially pending)
