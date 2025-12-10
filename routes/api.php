@@ -31,7 +31,7 @@ Route::post('/login', [LoginController::class, 'login'])->name('login');
 Route::prefix('sap')->group(function () {
     // Public Authentication route
     Route::post('/login', [SapLoginController::class, 'login']);
-    
+    Route::post('/login-rfid', [SapLoginController::class, 'loginWithRfid']);
     
     // Protected routes - require authentication
     Route::middleware('auth:sanctum_sap')->group(function () {
