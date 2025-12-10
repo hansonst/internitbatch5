@@ -20,10 +20,11 @@ class SapGrController extends Controller
         $statusCode = null,
         $errorMessage = null,
         $responseTime = null,
-        $sapEndpoint = null
+        $sapEndpoint = null,
+        $rfidUser = null
     ) {
         try {
-            $user = $request->user();
+            $user = $rfidUser ?? $request->user();
             
             // Extract business references from request
             $requestData = $request->all();
@@ -216,11 +217,12 @@ public function createGoodReceipt(Request $request)
 {
     // Validate input - support both single item and batch items
     $validated = $request->validate([
+        'id_card' => 'required|string',
         'dn_no' => 'required|string',  
         'doc_date' => 'required|date_format:d-m-Y', 
     'post_date' => 'required|date_format:d-m-Y',
         
-        // ✅ Only validate items array structure
+        
         'items' => 'required|array|min:1',
         'items.*.po_no' => 'required|string',
         'items.*.item_po' => 'required|string',
@@ -231,6 +233,24 @@ public function createGoodReceipt(Request $request)
         'items.*.dom' => 'nullable|string'
     ]);
 
+    $rfidVerification = $this->verifyRfidCard($validated['id_card']);
+    
+    if (!$rfidVerification['valid']) {
+        Log::warning('GR Post blocked - Invalid RFID', [
+            'id_card' => $validated['id_card'],
+            'reason' => $rfidVerification['message'],
+            'logged_in_user' => $request->user() ? $request->user()->user_id : 'N/A'
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'message' => $rfidVerification['message']
+        ], 403);
+    }
+    
+    $rfidUser = $rfidVerification['user']; // User who tapped the card
+    $loggedInUser = $request->user();
+
     $docDate = \Carbon\Carbon::createFromFormat('d-m-Y', $validated['doc_date'])->format('Y-m-d');
 $postDate = \Carbon\Carbon::createFromFormat('d-m-Y', $validated['post_date'])->format('Y-m-d');
 
@@ -240,6 +260,7 @@ $postDate = \Carbon\Carbon::createFromFormat('d-m-Y', $validated['post_date'])->
 
     Log::info('=== CREATE GOOD RECEIPT START ===', [
         'auth_user' => $user ? ($user->user_id ?? $user->id) : 'PUBLIC',
+        'rfid_verified_user' => $rfidUser->user_id,
         'user_email' => $user ? ($user->email ?? 'N/A') : 'PUBLIC',
         'items_count' => count($validated['items']),
         'request_data' => $validated
@@ -278,10 +299,11 @@ $postDate = \Carbon\Carbon::createFromFormat('d-m-Y', $validated['post_date'])->
                 'dom' => $item['dom'] ?? null,
                 'success' => false,
                 'error_message' => 'Processing...',
-                'user_id' => $user ? $user->user_id : null,
-                'users_table_id' => $user ? $user->id : null,
+                'user_id' => $rfidUser->user_id,
+                'users_table_id' => $rfidUser->id,
                 'user_email' => $user ? $user->email : null,
                 'department' => $user ? $user->department : null,
+                'logged_in_user_id' => $loggedInUser ? $loggedInUser->user_id : null,
                 'sap_request' => $item,
                 'sap_endpoint' => $url
             ]);
@@ -339,7 +361,8 @@ $postDate = \Carbon\Carbon::createFromFormat('d-m-Y', $validated['post_date'])->
                 $response->status(), 
                 null, 
                 $responseTime, 
-                $url
+                $url,
+                $rfidUser
             );
 
             Log::info('=== CREATE GOOD RECEIPT END (SUCCESS) ===', [
@@ -382,7 +405,8 @@ $postDate = \Carbon\Carbon::createFromFormat('d-m-Y', $validated['post_date'])->
             $response->status(), 
             $response->body(), 
             $responseTime, 
-            $url
+            $url,
+            $rfidUser
         );
 
         return response()->json([
@@ -411,7 +435,8 @@ $postDate = \Carbon\Carbon::createFromFormat('d-m-Y', $validated['post_date'])->
             500, 
             $e->getMessage(), 
             $responseTime, 
-            $url ?? null
+            $url ?? null,
+            $rfidUser
         );
 
         Log::error('Exception in createGoodReceipt', [
@@ -551,4 +576,30 @@ $postDate = \Carbon\Carbon::createFromFormat('d-m-Y', $validated['post_date'])->
             ], 500);
         }
     }
+    /**
+ * Verify RFID card exists and is active
+ */
+private function verifyRfidCard($idCard)
+{
+    $user = \App\Models\UserSap::where('id_card', $idCard)->first();
+    
+    if (!$user) {
+        return [
+            'valid' => false,
+            'message' => 'RFID card not registered'
+        ];
+    }
+    
+    if (!$user->isActive()) {
+        return [
+            'valid' => false,
+            'message' => 'User account is not active'
+        ];
+    }
+    
+    return [
+        'valid' => true,
+        'user' => $user
+    ];
+}
 }

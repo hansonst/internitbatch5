@@ -184,6 +184,93 @@ Log::info('SAP Login successful', [
         }
     }
 
+    public function loginWithRfid(Request $request)
+{
+    Log::info('SAP RFID Login attempt', [
+        'id_card' => $request->id_card,
+        'ip' => $request->ip()
+    ]);
+
+    // Validate input
+    $validator = Validator::make($request->all(), [
+        'id_card' => 'required|string',
+    ]);
+
+    if ($validator->fails()) {
+        $this->logAuthEvent('login_attempt', $request->id_card ?? 'unknown', false, $request, null, 'validation_error');
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Validation error',
+            'errors' => $validator->errors()
+        ], 422);
+    }
+
+    try {
+        // Find user by id_card (RFID)
+        $user = UserSap::where('id_card', $request->id_card)->first();
+
+        if (!$user) {
+            $this->logAuthEvent('login_failed', $request->id_card, false, $request, null, 'rfid_not_found');
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'RFID card not registered'
+            ], 401);
+        }
+
+        if (!$user->isActive()) {
+            $this->logAuthEvent('login_failed', $user->user_id, false, $request, $user, 'user_inactive');
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'User account is not active'
+            ], 403);
+        }
+
+        // Create token
+        $token = $user->createToken('sap-rfid-auth-token', ['*'], now()->addDays(30))->plainTextToken;
+
+        $this->logAuthEvent('login_success_rfid', $user->user_id, true, $request, $user);
+
+        Log::info('SAP RFID Login successful', [
+            'user_id' => $user->user_id,
+            'department' => $user->department
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Login successful',
+            'data' => [
+                'user' => [
+                    'user_id' => $user->user_id,
+                    'full_name' => $user->full_name,
+                    'first_name' => $user->first_name,
+                    'last_name' => $user->last_name,
+                    'jabatan' => $user->jabatan,
+                    'department' => $user->department,
+                    'email' => $user->email,
+                    'status' => $user->status,
+                ],
+                'token' => $token,
+                'token_type' => 'Bearer'
+            ]
+        ], 200);
+
+    } catch (\Exception $e) {
+        Log::error('SAP RFID Login exception', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Login failed',
+            'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+        ], 500);
+    }
+}
+
     /**
      * Handle SAP user logout
      *
